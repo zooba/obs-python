@@ -85,6 +85,8 @@ def build_windows(outdir, tmpdir, editable):
             print(".", file=f)
             print("python36.zip", file=f)
             print(SRC, file=f)
+        if (pydir / "obs").is_dir():
+            shutil.rmtree(pydir / "obs")
     else:
         shutil.copytree(SRC / "obs", pydir / "obs", dirs_exist_ok=True)
 

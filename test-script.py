@@ -2,23 +2,28 @@
 import obs
 import obs.props as OP
 
+import requests
+from time import sleep
+
 PROPERTIES = [
-    OP.Text("text1", "My Text Box"),
-    OP.SourceList("source", "Source", "text*", editable=True),
-    OP.SourceList("source2", "Source2", "*source"),
-    OP.Text("text2", "Password", password=True),
-    OP.Text("text3", "Lines", multiline=True),
-    OP.Path("path1", "File", open_file=True, filter="*.txt"),
-    OP.Path("path2", "Directory", open_directory=True),
-    OP.DropDown("items1", "Items 1", editable=True, items=["A", "B", ("C", "c")]),
-    OP.DropDown("items2", "Items 2", editable=True, type=int, items=[1, 2, 3]),
-    OP.DropDown("items3", "Items 3", type=float, items=[("One", 1.0), ("Two", 2), 3.0]),
+    OP.Text("url", "URL"),
+    OP.Number("interval", "Time (s)", 1, 30, 0.5),
+    OP.TextSources("source", "Source"),
 ]
 
 VALUES = {}
 
+def do_switching():
+    while True:
+        r = requests.get(VALUES["url"])
+        r.raise_for_status()
+        VALUES["source"]["text"] = r.text
+        sleep(max(VALUES["interval"], 1))
+
+
 def on_update():
-    print(VALUES)
+    if VALUES["url"] and VALUES["interval"] and VALUES["source"]:
+        obs.run(do_switching)
 
 
 obs.ready(globals())

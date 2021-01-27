@@ -1,5 +1,9 @@
 import obspython as _obs
+from . import loop as _loop
 from . import props as _props
+
+def run(callable):
+    _loop.LOOP.schedule("new_thread", callable)
 
 def ready(globals):
     try:
@@ -10,6 +14,8 @@ def ready(globals):
         def script_description():
             return desc
         globals["script_description"] = script_description
+
+    _loop.LOOP.reset()
 
     try:
         props = globals["PROPERTIES"]
@@ -28,6 +34,7 @@ def ready(globals):
             on_update = None
 
         def script_update(data):
+            _loop.LOOP.reset()
             for p in props:
                 values[p.name] = p._get(data)
             if on_update:

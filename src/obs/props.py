@@ -39,8 +39,8 @@ class Number:
         self.name = name
         self.text = text
         t = int
-        if float or isinstance(self.max - self.min + self.step, self._float):
-            t = float
+        if float or isinstance(maximum - minimum + step, self._float):
+            t = self._float
         self.type = t
         self.min = t(minimum)
         self.max = t(maximum)
@@ -184,4 +184,34 @@ class SourceList:
         n = _obs.obs_data_get_string(data, self.name)
         if n:
             return _Source(n)
+
+
+class TextSources(SourceList):
+    def __init__(self, name, text):
+        super().__init__(name, text, "text_*")
+
+
+class AudioSources(SourceList):
+    def __init__(self, name, text):
+        super().__init__(name, text, "wasapi_*")
+
+
+class MediaSources(SourceList):
+    def __init__(self, name, text):
+        super().__init__(name, text, "ffmpeg_*")
+
+
+class ImageSources(SourceList):
+    def __init__(self, name, text):
+        super().__init__(name, text, "image_source")
+
+
+class ColorSources(SourceList):
+    def __init__(self, name, text):
+        super().__init__(name, text, "color_source")
+
+
+class SourceGroups(SourceList):
+    def __init__(self, name, text):
+        super().__init__(name, text, "group")
 
