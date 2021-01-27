@@ -55,8 +55,8 @@ def extract_whl(package, version, file_prefixes, outdir, tmpdir):
         names = []
         skipped = set()
         for n in zf.namelist():
-            if "/" not in n and n.endswith((".dist-info", ".data")):
-                skipped.add(n + "/")
+            if n.partition("/")[0].endswith((".dist-info", ".data")):
+                pass
             elif any(n.startswith(n2) for n2 in skipped):
                 pass
             elif file_prefixes and any(n.startswith(n2) for n2 in file_prefixes):
@@ -66,7 +66,7 @@ def extract_whl(package, version, file_prefixes, outdir, tmpdir):
         zf.extractall(outdir, members=names)
 
 
-def build_windows(outdir, tmpdir):
+def build_windows(outdir, tmpdir, editable):
     pydir = outdir / "python"
     pydir.mkdir(parents=True, exist_ok=True)
     package = tmpdir / WIN32_PACKAGE
@@ -80,11 +80,13 @@ def build_windows(outdir, tmpdir):
     for pkname, pkver in INSTALL:
         extract_whl(pkname, pkver, PACKAGE_FILTER.get(pkname, ()), pydir, tmpdir)
 
-    #shutil.copytree(SRC / "obs", pydir / "obs", dirs_exist_ok=True)
-    with open(pydir / "python36._pth", "w", encoding="utf-8") as f:
-        print(".", file=f)
-        print("python36.zip", file=f)
-        print(SRC, file=f)
+    if editable:
+        with open(pydir / "python36._pth", "w", encoding="utf-8") as f:
+            print(".", file=f)
+            print("python36.zip", file=f)
+            print(SRC, file=f)
+    else:
+        shutil.copytree(SRC / "obs", pydir / "obs", dirs_exist_ok=True)
 
 
 if __name__ == "__main__":
@@ -97,8 +99,9 @@ if __name__ == "__main__":
         tmpdir = Path(sys.argv[sys.argv.index("-t") + 1])
     except (LookupError, ValueError):
         tmpdir = Path.cwd() / "tmp"
+    editable = "-e" in sys.argv
     print("Temporary dir:", tmpdir)
     outdir.mkdir(parents=True, exist_ok=True)
     tmpdir.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
-        build_windows(outdir, tmpdir)
+        build_windows(outdir, tmpdir, editable)
