@@ -7,19 +7,23 @@ from pathlib import Path
 from urllib.request import urlopen, urlretrieve
 from zipfile import ZipFile
 
-SRC = Path(__file__).absolute().parent / "src"
+ROOT = Path(__file__).absolute().parent
+SRC = ROOT / "src"
 
 WIN32_PACKAGE_URL = "https://www.python.org/ftp/python/3.6.8/python-3.6.8-embed-amd64.zip"
 WIN32_PACKAGE = "python-3.6.8-embed-amd64.zip"
 WIN32_EXCLUDED = ["_distutils_findvs.pyd", "_msi.pyd", "pythonw.exe", "winsound.pyd"]
 
-INSTALL = [
-    ("requests", "2.25.1", ["requests/"]),
-    ("urllib3", "1.26.2", ["urllib3/"]),
-    ("certifi", "2020.12.5", ["certifi/"]),
-    ("chardet", "4.0.0", ["chardet/"]),
-    ("idna", "2.10", ["idna/"]),
-]
+PACKAGE_FILTER = {}
+
+with open(ROOT / "requirements.txt", "r", encoding="utf-8") as f:
+    INSTALL = [
+        (i[0], i[2])
+        for i in (j.partition("==")
+                  for j in (k.strip() for k in f)
+                  if j and not j.startswith("#"))
+        if i[1] == "=="
+    ]
 
 
 def file_sha256(path):
@@ -48,9 +52,17 @@ def extract_whl(package, version, file_prefixes, outdir, tmpdir):
 
     print("Extracting", whlfile, "to", outdir)
     with ZipFile(whlfile) as zf:
-        names = [n for n in zf.namelist()
-                 if any(n.startswith(p) for p in file_prefixes)
-                 or not file_prefixes]
+        names = []
+        skipped = set()
+        for n in zf.namelist():
+            if "/" not in n and n.endswith((".dist-info", ".data")):
+                skipped.add(n + "/")
+            elif any(n.startswith(n2) for n2 in skipped):
+                pass
+            elif file_prefixes and any(n.startswith(n2) for n2 in file_prefixes):
+                skipped.add(n + "/")
+            else:
+                names.append(n)
         zf.extractall(outdir, members=names)
 
 
@@ -65,8 +77,8 @@ def build_windows(outdir, tmpdir):
     with ZipFile(package) as zf:
         names = [n for n in zf.namelist() if n not in WIN32_EXCLUDED]
         zf.extractall(pydir, members=names)
-    for pkname, pkver, pknames in INSTALL:
-        extract_whl(pkname, pkver, pknames, pydir, tmpdir)
+    for pkname, pkver in INSTALL:
+        extract_whl(pkname, pkver, PACKAGE_FILTER.get(pkname, ()), pydir, tmpdir)
 
     #shutil.copytree(SRC / "obs", pydir / "obs", dirs_exist_ok=True)
     with open(pydir / "python36._pth", "w", encoding="utf-8") as f:
