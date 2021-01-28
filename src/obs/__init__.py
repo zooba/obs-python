@@ -18,27 +18,34 @@ def ready(globals):
     _loop.LOOP.reset()
 
     try:
-        props = globals["PROPERTIES"]
+        PROPS = globals["PROPERTIES"]
     except LookupError:
         pass
     else:
         def script_properties():
-            return _props.render(*props)
+            return _props.render(PROPS)
 
-        values = globals.setdefault("VALUES", {})
-        values.update({p.name: p._default() for p in props})
+        VALUES = globals.setdefault("VALUES", {})
+        for p in PROPS:
+            VALUES.update(p._default())
+
+        def script_defaults(data):
+            defaults = {}
+            for p in PROPS:
+                defaults.update(p._default())
+            f = _loop.Future()
+            _loop.LOOP.schedule("defaults", data, defaults, future=f)
+            return f.result()
 
         try:
-            on_update = globals["on_update"]
+            ON_UPDATE = globals["on_update"]
         except LookupError:
-            on_update = None
+            ON_UPDATE = None
 
         def script_update(data):
             _loop.LOOP.reset()
-            for p in props:
-                values[p.name] = p._get(data)
-            if on_update:
-                on_update()
+            _loop.LOOP.schedule("updated", PROPS, data, VALUES, ON_UPDATE)
 
         globals["script_properties"] = script_properties
         globals["script_update"] = script_update
+        globals["script_defaults"] = script_defaults

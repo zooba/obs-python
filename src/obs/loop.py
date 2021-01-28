@@ -2,6 +2,9 @@ import obspython as _obs
 import threading
 import traceback
 
+from . import data as _data
+
+
 class Future:
     _NOTSET = object()
     _EXCEPTION = object()
@@ -103,8 +106,13 @@ class Loop:
         _obs.timer_add(self._process, self.interval)
 
     def schedule(self, cmd, *args, future=None):
-        if self._tls.abort.has_result():
-            raise KeyboardInterrupt
+        try:
+            abort = self._tls.abort
+        except AttributeError:
+            pass
+        else:
+            if abort.has_result():
+                raise KeyboardInterrupt
         self.steps.append((getattr(self, "_" + cmd), args, future))
 
     def _source_by_name(self, name):
@@ -112,6 +120,15 @@ class Loop:
         if not s:
             raise LookupError("no source named {}".format(name))
         return _SourceReleaser(s)
+
+    def _updated(self, props, data, values, on_update):
+        for p in props:
+            values.update(p._get(data))
+        if on_update:
+            on_update()
+
+    def _defaults(self, data, defaults):
+        return _data.set_data(data, defaults.items(), defaults=True)
 
     def _new_thread(self, callable):
         def _starter():
