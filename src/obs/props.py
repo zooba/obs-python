@@ -19,6 +19,14 @@ def _apply_flags(p, source):
 
 
 class Group:
+    """Defines a group box that contains other properties.
+
+    The entire group may be checked/unchecked, which appears in the current values
+    under the name of the group.
+
+    Be aware that all members of the group appear at the top level of the set
+    values. The nesting is for UI only.
+    """
     def __init__(self, name, text, checkable=False, elements=None, default=True,
                  doc=None, visible=True, enabled=True):
         self.name = name
@@ -56,6 +64,7 @@ class Group:
 
 
 class Text:
+    """Defines a text field."""
     def __init__(self, name, text, password=False, multiline=False, default="",
                  doc=None, visible=True, enabled=True):
         self.name = name
@@ -84,6 +93,7 @@ class Text:
 
 
 class Checkbox:
+    """Defines a boolean field, which appears as a checkbox."""
     def __init__(self, name, text, default=False,
                  doc=None, visible=True, enabled=True):
         self.name = name
@@ -105,6 +115,14 @@ class Checkbox:
 
 
 class Number:
+    """Defines a number field or slider.
+
+    The type of number is inferred from the provided min/max/step/defaults, and
+    can be forced to float by passing 'float=True'.
+
+    The UI element is a scroller by default. Pass 'slider=True' to create a
+    slider.
+    """
     _float = float
 
     def __init__(self, name, text, minimum, maximum, step=1, float=False, scroller=False, slider=False, default=None,
@@ -112,7 +130,7 @@ class Number:
         self.name = name
         self.text = text
         t = int
-        if float or isinstance(maximum - minimum + step, self._float):
+        if float or isinstance(default, self._float) or isinstance(maximum - minimum + step, self._float):
             t = self._float
         self.type = t
         self.min = t(minimum)
@@ -145,7 +163,18 @@ class Number:
 
 
 class Path:
-    def __init__(self, name, text, open_file=False, save_file=False, open_directory=False, filter="*.*", default=None,
+    """Create a path element, which requires users to browse to get the value.
+
+    By default, the Browse button will only open existing files. Pass 'save_file=True'
+    to allow specifying non-existent files, or 'open_directory=True' to select a folder.
+
+    'filter' is a single 'Text (*.ext;*.ex2)' style string to be used when opening or
+    saving files.
+
+    The value from this element will be a 'pathlib.Path' object or None.
+    """
+    def __init__(self, name, text, open_file=False, save_file=False, open_directory=False,
+                 filter="All Files (*.*)", default=None,
                  doc=None, visible=True, enabled=True):
         self.name = name
         self.text = text
@@ -188,6 +217,10 @@ def _pairs(items):
 
 
 class DropDown:
+    """Create a dropdown list element.
+
+    'type' may be str, int or float, and all items will be converted to that type.
+    """
     def __init__(self, name, text, editable=False, type=str, items=None, default=None,
                  doc=None, visible=True, enabled=True):
         self.name = name
@@ -214,7 +247,7 @@ class DropDown:
             add = _obs.obs_property_list_add_float
         p = _obs.obs_properties_add_list(props, self.name, self.text, flag, fmt)
         _apply_flags(p, self)
-        
+
         for k, v in _pairs(self.items):
             add(p, str(k), self.type(v))
 
@@ -232,6 +265,10 @@ class DropDown:
 
 
 class ColorPicker:
+    """Create a color picker element.
+
+    Colors are represented as 24-bit integer values 0xBBGGRR.
+    """
     def __init__(self, name, text, default=0xFFFFFF,
                  doc=None, visible=True, enabled=True):
         self.name = name
@@ -258,6 +295,7 @@ def _button_call(properties, btn):
 
 
 class Button:
+    """Create a button element with a callback."""
     CALLBACKS = {}
 
     def __init__(self, name, text, callback,
@@ -283,13 +321,24 @@ class Button:
 
 
 class Migrate:
-    """Reads """
-    def __init__(self, name, old_type, new_name, convert=None, permanent=False):
+    """Create a migration element.
+
+    Migration elements do not appear in the UI, but will read previously stored properties
+    and convert them to a new property. If the new property also has a UI element, the
+    migration element should appear earlier.
+
+    If 'new_name' has already been set, the migration is ignored. If 'name' does not have a
+    stored value, a default value for 'new_name' is only set if another element provides it.
+
+    'old_type' must be one of bool, int, float or str.
+
+    If 'new_name' is omitted, the value is made available as its old name.
+    """
+    def __init__(self, name, old_type, new_name=None, convert=None):
         self.name = name
         self.old_type = old_type
         self.new_name = new_name
         self.convert = convert
-        self.permanent = permanent
 
     def _add(self, props):
         if self.old_type is bool:
@@ -309,19 +358,18 @@ class Migrate:
         return {}
 
     def _get(self, data):
-        try:
-            return {self.new_name: _data.get_value(data, self.new_name)}
-        except LookupError:
-            pass
+        if self.new_name:
+            try:
+                return {self.new_name: _data.get_value(data, self.new_name)}
+            except LookupError:
+                pass
         v1 = _data.get_value(data, self.name)
         if convert:
             v2 = convert(v1)
         else:
             v2 = v1
-        r = {self.new_name: v2}
-        if self.permanent:
-            _data.set_values(data, r.items())
-        return r
+        return {self.new_name or self.name: v2}
+
 
 def _contains_pattern(s, patterns):
     if not patterns:
@@ -339,6 +387,13 @@ def _contains_pattern(s, patterns):
 
 
 class SourceList:
+    """Create a list of sources matching certain kinds.
+
+    Each kind is either a 'perfect match', 'prefix*', '*suffix', or '*substring*' of
+    the source kind (unversioned ID).
+
+    Consider using one of the predefined source lists for common types.
+    """
     def __init__(self, name, text, *kinds, editable=False,
                  doc=None, visible=True, enabled=True):
         self.name = name
@@ -375,31 +430,36 @@ class SourceList:
 
 
 class TextSources(SourceList):
+    "A list of text sources."
     def __init__(self, name, text):
         super().__init__(name, text, "text_*")
 
 
 class AudioSources(SourceList):
+    "A list of audio sources."
     def __init__(self, name, text):
         super().__init__(name, text, "wasapi_*")
 
 
 class MediaSources(SourceList):
+    "A list of media sources."
     def __init__(self, name, text):
         super().__init__(name, text, "ffmpeg_*")
 
 
 class ImageSources(SourceList):
+    "A list of image sources."
     def __init__(self, name, text):
         super().__init__(name, text, "image_source")
 
 
 class ColorSources(SourceList):
+    "A list of color sources."
     def __init__(self, name, text):
         super().__init__(name, text, "color_source")
 
 
 class SourceGroups(SourceList):
+    "A list of groups."
     def __init__(self, name, text):
         super().__init__(name, text, "group")
-
