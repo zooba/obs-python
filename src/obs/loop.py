@@ -3,7 +3,7 @@ import threading
 import traceback
 
 from . import data as _data
-
+from . import _helper
 
 class Future:
     _NOTSET = object()
@@ -174,6 +174,14 @@ class Loop:
                 _obs.obs_source_update(s, d)
             finally:
                 _obs.obs_data_release(d)
+
+
+    def _obs_source_get_frame_data(self, source_name):
+        with self._source_by_name(source_name) as s:
+            return _helper.render_source_to_data(s)
+
+    def _obs_source_destroy_frame_data(self, source_name, data):
+        _helper.destroy_rendered_data(data)
 
 
 LOOP = Loop()
