@@ -8,7 +8,8 @@ from time import sleep
 VALUES = {}
 
 PROPERTIES = [
-    OP.Group("on", "Frame Grab", checkable=True, default=False, elements=[
+    OP.Checkbox("on", "Enabled", default=False),
+    OP.Group("group1", "Frame Grab", elements=[
         OP.Number("interval", "Time (s)", 0.1, 5, 0.1, default=1.0),
         OP.TextSources("out", "Text Output"),
         OP.SourceList("framesource", "Source"),
