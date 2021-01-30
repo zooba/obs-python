@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 import shutil
+import subprocess
 import sys
 
 from pathlib import Path
@@ -12,6 +14,8 @@ SRC = ROOT / "src"
 
 WIN32_PACKAGE_URL = "https://www.python.org/ftp/python/3.6.8/python-3.6.8-embed-amd64.zip"
 WIN32_PACKAGE = "python-3.6.8-embed-amd64.zip"
+NUGET_PACKAGE = "python"
+NUGET_VERSION = "3.6.8"
 WIN32_EXCLUDED = ["_distutils_findvs.pyd", "_msi.pyd", "pythonw.exe", "winsound.pyd"]
 
 PACKAGE_FILTER = {}
@@ -66,6 +70,18 @@ def extract_whl(package, version, file_prefixes, outdir, tmpdir):
         zf.extractall(outdir, members=names)
 
 
+def build_windows_package():
+    subprocess.run(
+        [sys.executable, "-m", "pymsbuild"],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "PYMSBUILD_WHEEL_TAG": "py36-cp36-win_amd64",
+            "PYTHON_INCLUDES": str(ROOT / "deps/python/Include"),
+            "PYTHON_LIBS": str(ROOT / "deps/python/libs"),
+        }
+    )
+
 def build_windows(outdir, tmpdir, editable):
     pydir = outdir / "python"
     pydir.mkdir(parents=True, exist_ok=True)
@@ -102,8 +118,11 @@ if __name__ == "__main__":
     except (LookupError, ValueError):
         tmpdir = Path.cwd() / "tmp"
     editable = "-e" in sys.argv
+    inplace = "--inplace" in sys.argv
     print("Temporary dir:", tmpdir)
     outdir.mkdir(parents=True, exist_ok=True)
     tmpdir.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
-        build_windows(outdir, tmpdir, editable)
+        build_windows_package()
+        if not inplace:
+            build_windows(outdir, tmpdir, editable)

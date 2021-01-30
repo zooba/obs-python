@@ -105,14 +105,15 @@ class Loop:
             f.set_exception("Resetting")
         _obs.timer_add(self._process, self.interval)
 
-    def schedule(self, cmd, *args, future=None):
-        try:
-            abort = self._tls.abort
-        except AttributeError:
-            pass
-        else:
-            if abort.has_result():
-                raise KeyboardInterrupt
+    def schedule(self, cmd, *args, future=None, always=False):
+        if not always:
+            try:
+                abort = self._tls.abort
+            except AttributeError:
+                pass
+            else:
+                if abort.has_result():
+                    raise KeyboardInterrupt
         self.steps.append((getattr(self, "_" + cmd), args, future))
 
     def _source_by_name(self, name):
@@ -180,8 +181,8 @@ class Loop:
         with self._source_by_name(source_name) as s:
             return _helper.render_source_to_data(s)
 
-    def _obs_source_destroy_frame_data(self, source_name, data):
-        _helper.destroy_rendered_data(data)
+    def _close_object(self, obj):
+        obj.close()
 
 
 LOOP = Loop()

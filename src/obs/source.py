@@ -1,5 +1,29 @@
 from .loop import Future, LOOP
-from ._helper import rendered_data_to_bytes
+
+__all__ = ["Source"]
+
+
+class FrameData:
+    def __init__(self, _future):
+        self._future = _future
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def __iter__(self):
+        return iter(self._future.result())
+
+    def close(self):
+        try:
+            d = self._future.result()
+        except RuntimeError:
+            pass
+        else:
+            LOOP.schedule("close_object", d, always=True)
+
 
 class Source:
     def __init__(self, name, loop=None):
@@ -40,7 +64,4 @@ class Source:
     def get_frame(self):
         f = Future()
         self._do("obs_source_get_frame_data", future=f)
-        data = f.result()
-        r = rendered_data_to_bytes(data)
-        self._do("obs_source_destroy_frame_data", data)
-        return r
+        return FrameData(f)
