@@ -441,6 +441,15 @@ class AudioSources(SourceList):
         super().__init__(name, text, "wasapi_*")
 
 
+class VideoSources(SourceList):
+    "A list of video sources."
+    def __init__(self, name, text, include_media=True):
+        kinds = ("dshow_input", "streamfx-source-mirror")
+        if include_media:
+            kinds += ("ffmpeg_*",)
+        super().__init__(name, text, *kinds)
+
+
 class MediaSources(SourceList):
     "A list of media sources."
     def __init__(self, name, text):

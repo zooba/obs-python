@@ -8,6 +8,7 @@ from . import _helper
 class Future:
     _NOTSET = object()
     _EXCEPTION = object()
+    _INTERRUPT = object()
     _WAITING = []
 
     def __init__(self):
@@ -23,6 +24,8 @@ class Future:
         if r is not self._NOTSET:
             if r is self._EXCEPTION:
                 raise RuntimeError(self._exception)
+            elif r is self._INTERRUPT:
+                raise KeyboardInterrupt(self._exception)
             return r
         l = self._lock.get("o")
         if l is None:
@@ -42,6 +45,8 @@ class Future:
                 raise TimeoutError()
         if r is self._EXCEPTION:
             raise RuntimeError(self._exception)
+        elif r is self._INTERRUPT:
+            raise KeyboardInterrupt(self._exception)
         return r
 
     def set_result(self, value):
@@ -54,13 +59,18 @@ class Future:
         self._exception = message
         self.set_result(self._EXCEPTION)
 
+    def interrupt(self, message):
+        self._exception = message
+        self.set_result(self._INTERRUPT)
+
 
 class _SourceReleaser:
-    def __init__(self, source):
+    def __init__(self, source, returns=None):
         self._source = source
+        self._returns = returns
 
     def __enter__(self):
-        return self._source
+        return self._returns or self._source
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         _obs.obs_source_release(self._source)
@@ -100,9 +110,9 @@ class Loop:
         threads, self._threads = self._threads, []
         self.steps = []
         for t in threads:
-            t.set_exception("Resetting")
+            t.interrupt("Resetting")
         for f in Future._WAITING:
-            f.set_exception("Resetting")
+            f.interrupt("Resetting")
         _obs.timer_add(self._process, self.interval)
 
     def schedule(self, cmd, *args, future=None, always=False):
@@ -121,6 +131,17 @@ class Loop:
         if not s:
             raise LookupError("no source named {}".format(name))
         return _SourceReleaser(s)
+
+    def _sceneitem_by_name(self, name, scene=None):
+        if scene is None:
+            scene_s = _obs.obs_frontend_get_current_scene()
+            scene = _obs.obs_scene_from_source(scene_s)
+        if scene is None:
+            raise LookupError("unable to find current scene")
+        i = _obs.obs_scene_find_source_recursive(scene, name)
+        if i is None:
+            raise LookupError("no sceneitem named {}".format(name))
+        return i
 
     def _updated(self, props, data, values, on_update):
         for p in props:
@@ -183,6 +204,41 @@ class Loop:
 
     def _close_object(self, obj):
         obj.close()
+
+
+    def _obs_source_get_pos(self, source_name):
+        si = self._sceneitem_by_name(source_name)
+        p = _obs.vec2()
+        _obs.obs_sceneitem_get_pos(si, p)
+        return p.x, p.y
+
+    def _obs_source_set_pos(self, source_name, pos):
+        si = self._sceneitem_by_name(source_name)
+        p = _obs.vec2()
+        p.x, p.y = pos
+        _obs.obs_sceneitem_set_pos(si, p)
+
+    def _obs_source_get_crop(self, source_name):
+        si = self._sceneitem_by_name(source_name)
+        crop = _obs.obs_sceneitem_crop()
+        _obs.obs_sceneitem_get_crop(si, crop)
+        return crop.left, crop.right, crop.top, crop.bottom
+
+    def _obs_source_adjust_crop(self, source_name, crop_deltas):
+        si = self._sceneitem_by_name(source_name)
+        crop = _obs.obs_sceneitem_crop()
+        _obs.obs_sceneitem_get_crop(si, crop)
+        crop.left += crop_deltas[0]
+        crop.right += crop_deltas[1]
+        crop.top += crop_deltas[2]
+        crop.bottom += crop_deltas[3]
+        _obs.obs_sceneitem_set_crop(si, crop)
+
+    def _obs_source_set_crop(self, source_name, crop_sizes):
+        si = self._sceneitem_by_name(source_name)
+        crop = _obs.obs_sceneitem_crop()
+        crop.left, crop.right, crop.top, crop.bottom = crop_sizes
+        _obs.obs_sceneitem_set_crop(si, crop)
 
 
 LOOP = Loop()

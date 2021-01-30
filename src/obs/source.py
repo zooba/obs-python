@@ -65,3 +65,22 @@ class Source:
         f = Future()
         self._do("obs_source_get_frame_data", future=f)
         return FrameData(f)
+
+    def get_pos(self):
+        f = Future()
+        self._do("obs_source_get_pos", future=f)
+        return f.result()
+
+    def set_pos(self, x, y):
+        self._do("obs_source_set_pos", (x, y))
+
+    def get_crop(self):
+        f = Future()
+        self._do("obs_source_get_crop", future=f)
+        return f.result()
+
+    def set_crop(self, left, right, top, bottom):
+        self._do("obs_source_set_crop", (left, right, top, bottom))
+
+    def adjust_crop(self, d_left, d_right, d_top, d_bottom):
+        self._do("obs_source_adjust_crop", (d_left, d_right, d_top, d_bottom))
