@@ -16,6 +16,8 @@ jobs:
       - uses: actions/checkout@v2
       - name: Setup Python
         uses: actions/setup-python@v2.2.1
+      - name: Install Python requirements
+        run: python -m pip install pymsbuild Cython
       - name: Run a test build
         run: python build.py
       - name: List output

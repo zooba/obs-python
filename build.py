@@ -79,7 +79,8 @@ def build_windows_package():
             "PYMSBUILD_WHEEL_TAG": "py36-cp36-win_amd64",
             "PYTHON_INCLUDES": str(ROOT / "deps/python/Include"),
             "PYTHON_LIBS": str(ROOT / "deps/python/libs"),
-        }
+        },
+        check=True,
     )
 
 def build_windows(outdir, tmpdir, editable):
