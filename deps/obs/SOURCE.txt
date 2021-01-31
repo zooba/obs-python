@@ -1,0 +1,6 @@
+Files generated from released binaries from https://github.com/obsproject/obs-studio/tree/26.1.1
+
+To regenerate/update the .lib files:
+    dumpbin /exports obs.dll > obs.def
+    Manually clean up file
+    lib /def:obs.def /machine:x64 /out:obs.lib

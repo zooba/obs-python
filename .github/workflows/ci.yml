@@ -14,12 +14,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+        name: Get OBS headers
+        with:
+          repository: obsproject/obs-studio
+          ref: 26.1.1
+          fetch-depth: 1
+          persist-credentials: false
+          path: deps\obs-source
       - name: Setup Python
         uses: actions/setup-python@v2.2.1
       - name: Install Python requirements
         run: python -m pip install pymsbuild Cython
-      - name: Run a test build
+      - name: Run a build
         run: python build.py
+        env:
+          OBS_SOURCE: ${{ github.workspace }}\deps\obs-source
       - name: List output
         run: dir -Recurse out
       - name: Publish package

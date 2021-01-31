@@ -17,16 +17,26 @@ METADATA = {
     ],
 }
 
-INCLUDE = str(Path.cwd() / "deps/obs/Include")
+INCLUDES = Path(getenv("OBS_SOURCE")) / "libobs"
+CL_COMPILE = ItemDefinition(
+    "ClCompile",
+    AdditionalIncludeDirectories=ConditionalValue(str(INCLUDES) + ";", prepend=True)
+)
+
+LIBS = Path.cwd() / "deps/obs"
+LINK = ItemDefinition(
+    "Link",
+    AdditionalDependencies=ConditionalValue("obs.lib;", prepend=True),
+    AdditionalLibraryDirectories=ConditionalValue(str(LIBS) + ";", prepend=True)
+)
 
 PACKAGE = Package(
     "obs",
     PyFile(r"obs\*.py"),
     CythonPydFile(
         "_helper",
-        ItemDefinition("ClCompile",
-            AdditionalIncludeDirectories=ConditionalValue(INCLUDE + ";", prepend=True)
-        ),
+        CL_COMPILE,
+        LINK,
         PyxFile(r"obs\_helper.pyx"),
     ),
     source="src",

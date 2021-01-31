@@ -199,8 +199,7 @@ class Loop:
 
 
     def _obs_source_get_frame_data(self, source_name):
-        with self._source_by_name(source_name) as s:
-            return _helper.render_source_to_data(s)
+        return _helper.render_source_to_data(source_name)
 
     def _close_object(self, obj):
         obj.close()

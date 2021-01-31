@@ -18,6 +18,8 @@ NUGET_PACKAGE = "python"
 NUGET_VERSION = "3.6.8"
 WIN32_EXCLUDED = ["_distutils_findvs.pyd", "_msi.pyd", "pythonw.exe", "winsound.pyd"]
 
+OBS_SOURCE_URL = "https://github.com/obsproject/obs-studio/archive/26.1.1.zip"
+
 PACKAGE_FILTER = {}
 
 with open(ROOT / "requirements.txt", "r", encoding="utf-8") as f:
@@ -70,7 +72,24 @@ def extract_whl(package, version, file_prefixes, outdir, tmpdir):
         zf.extractall(outdir, members=names)
 
 
-def build_windows_package():
+def download_obs_source(outdir, tmpdir):
+    if os.path.isdir(os.getenv("OBS_SOURCE", "")):
+        return
+    src = tmpdir / "obs_source.zip"
+    if not src.is_file():
+        print("Downloading", OBS_SOURCE_URL, "to", src)
+        urlretrieve(OBS_SOURCE_URL, filename=src)
+    out = tmpdir / "obs-source"
+    if not out.is_dir():
+        print("Extracting", src, "to", out)
+        deps.mkdir(parents=True, exist_ok=True)
+        with ZipFile(src) as zf:
+            zf.extractall(out)
+    os.environ["OBS_SOURCE"] = str(out)
+
+
+def build_windows_package(outdir, tmpdir):
+    download_obs_source(outdir, tmpdir)
     subprocess.run(
         [sys.executable, "-m", "pymsbuild"],
         cwd=ROOT,
@@ -124,6 +143,6 @@ if __name__ == "__main__":
     outdir.mkdir(parents=True, exist_ok=True)
     tmpdir.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
-        build_windows_package()
+        build_windows_package(outdir, tmpdir)
         if not inplace:
             build_windows(outdir, tmpdir, editable)
