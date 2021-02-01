@@ -84,11 +84,11 @@ class Loop:
         self._tls = threading.local()
         self._tls.abort = Future()
         self._threads = []
+        self._started = False
 
     def _process(self):
         if not self.steps:
             return
-        _obs.remove_current_callback()
         todo = self.steps_per_interval
         steps = self.steps
         while steps and todo > 0:
@@ -98,13 +98,19 @@ class Loop:
                 if future:
                     future.set_result(r)
             except Exception as ex:
+                _obs.remove_current_callback()
+                self._started = False
                 if future:
                     future.set_exception(ex)
                 traceback.print_exc()
                 return
             steps = self.steps
             todo -= 1
-        _obs.timer_add(self._process, self.interval)
+
+    def start(self):
+        if not self._started:
+            self._started = True
+            _obs.timer_add(self._process, self.interval)
 
     def reset(self):
         threads, self._threads = self._threads, []
@@ -113,9 +119,12 @@ class Loop:
             t.interrupt("Resetting")
         for f in Future._WAITING:
             f.interrupt("Resetting")
-        _obs.timer_add(self._process, self.interval)
+        self.start()
 
     def schedule(self, cmd, *args, future=None, always=False):
+        self.schedule_call(getattr(self, "_" + cmd), *args, future=future, always=always)
+
+    def schedule_call(self, callable, *args, future=None, always=False):
         if not always:
             try:
                 abort = self._tls.abort
@@ -124,7 +133,7 @@ class Loop:
             else:
                 if abort.has_result():
                     raise KeyboardInterrupt
-        self.steps.append((getattr(self, "_" + cmd), args, future))
+        self.steps.append((callable, args, future))
 
     def _source_by_name(self, name):
         s = _obs.obs_get_source_by_name(name)
@@ -163,27 +172,11 @@ class Loop:
         t = threading.Thread(target=_starter)
         t.start()
 
-    def _obs_source_inc_showing(self, source_name):
-        with self._source_by_name(source_name) as s:
-            _obs.obs_source_inc_showing(s)
-
-    def _obs_source_dec_showing(self, source_name):
-        with self._source_by_name(source_name) as s:
-            _obs.obs_source_dec_showing(s)
-
-    def _obs_source_inc_active(self, source_name):
-        with self._source_by_name(source_name) as s:
-            _obs.obs_source_inc_active(s)
-
-    def _obs_source_dec_active(self, source_name):
-        with self._source_by_name(source_name) as s:
-            _obs.obs_source_dec_active(s)
-
     def _obs_source_get_type(self, source_name):
         with self._source_by_name(source_name) as s:
             return _obs.obs_source_get_unversioned_id(s)
 
-    def _obs_source_get_property_values(self, source_name, property_name):
+    def _obs_source_get_property_values(self, source_name):
         pass
 
     def _obs_source_set_property_values(self, source_name, values):
@@ -199,7 +192,8 @@ class Loop:
 
 
     def _obs_source_get_frame_data(self, source_name):
-        return _helper.render_source_to_data(source_name)
+        with self._source_by_name(source_name) as s:
+            return _helper.render_source_to_data(s)
 
     def _close_object(self, obj):
         obj.close()

@@ -16,6 +16,21 @@ class FrameData:
     def __iter__(self):
         return iter(self._future.result())
 
+    def __getitem__(self, key):
+        return self._future.result()[key]
+
+    @property
+    def width(self):
+        return self._future.result().width
+
+    @property
+    def height(self):
+        return self._future.result().height
+
+    @property
+    def depth(self):
+        return self._future.result().depth
+
     def close(self):
         try:
             d = self._future.result()
@@ -33,18 +48,6 @@ class Source:
     def _do(self, cmd, *args, future=None):
         LOOP.schedule(cmd, self.name, *args, future=future)
 
-    def show(self):
-        self._do("obs_source_inc_showing")
-
-    def hide(self):
-        self._do("obs_source_dec_showing")
-
-    def activate(self):
-        self._do("obs_source_inc_active")
-
-    def deactivate(self):
-        self._do("obs_source_dec_active")
-
     def get_type(self):
         f = Future()
         self._do("obs_source_get_type", future=f)
@@ -52,8 +55,8 @@ class Source:
 
     def __getitem__(self, key):
         f = Future()
-        self._do("obs_source_get_property_value", key, future=f)
-        return f.result()
+        self._do("obs_source_get_property_values", future=f)
+        return f.result()[key]
 
     def __setitem__(self, key, value):
         self._do("obs_source_set_property_values", {key: value})

@@ -10,6 +10,9 @@ cdef extern from "stdint.h" nogil:
     ctypedef int uint32_t
     ctypedef int uint8_t
 
+cdef extern from "stdbool.h" nogil:
+    ctypedef bint bool
+
 cdef extern from "graphics/vec4.h" nogil:
     cdef struct vec4:
         pass
@@ -55,6 +58,18 @@ cdef extern from "obs.h" nogil:
     void obs_source_dec_showing(void* source)
 
 
+    uint32_t OBS_PROPERTY_GROUP
+
+    void* obs_properties_first(void* props);
+    bool obs_property_next(void** p)
+    const char *obs_property_name(void* p)
+    bool obs_property_enabled(void* p)
+    bool obs_property_visible(void* p)
+    uint32_t obs_property_get_type(void* p)
+    bool obs_property_modified(void* p, void* data)
+    void* obs_property_group_content(void* p)
+
+
 cdef class RenderedData:
     cdef void *stagesurf
     cdef public unsigned int width, height, depth
@@ -72,9 +87,26 @@ cdef class RenderedData:
             yield self.texdata[i:i + cx]
             i += stride
 
-    def __getitem__(self, int y):
-        y *= self.linesize
-        return self.texdata[y:y + self.width * self.depth]
+    def __getitem__(self, pts):
+        cdef bytearray r
+        cdef unsigned int p, cx, cy, depth, stride, i
+        if isinstance(pts, int):
+            y = pts * self.linesize
+            return self.texdata[y:y + self.width * self.depth]
+        if isinstance(pts, list):
+            i = 0
+            cx = self.width
+            cy = self.height
+            stride = self.linesize
+            depth = self.depth
+            r = bytearray([0x80]) * (len(pts) * depth)
+            for x, y in <list>pts:
+                if 0 <= x < cx and 0 <= y < cy:
+                    p = y * stride + x * depth
+                    r[i:i + depth] = self.texdata[p:p + depth]
+                i += depth
+            return r
+        raise TypeError("argument must be a row index or list of (x, y) pairs")
 
     def close(self):
         s = self.stagesurf
@@ -82,17 +114,15 @@ cdef class RenderedData:
         if s:
             with nogil:
                 obs_enter_graphics()
-                gs_stagesurface_unmap(self.stagesurf)
-                gs_stagesurface_destroy(self.stagesurf)
+                gs_stagesurface_unmap(s)
+                gs_stagesurface_destroy(s)
                 obs_leave_graphics()
 
     def __dealloc__(self):
         self.close()
 
 
-def render_source_to_data(str source_name, uint32_t color_depth=GS_R8):
-    source_name_u8 = source_name.encode("utf-8")
-    cdef const char *_source_name = source_name_u8
+def render_source_to_data(size_t source, uint32_t color_depth=GS_R8):
     cdef void *texrender = NULL
     cdef void *stagesurf = NULL
     cdef RenderedData r = RenderedData()
@@ -104,18 +134,14 @@ def render_source_to_data(str source_name, uint32_t color_depth=GS_R8):
     else:
         raise ValueError("unsupported color depth")
 
-    cdef void *source
-    with nogil:
-        source = obs_get_source_by_name(_source_name)
-    if not source:
-        raise LookupError(f"source '{source_name}' not found")
+    cdef void *s = <void*>source
 
     try:
         with nogil:
             obs_enter_graphics()
 
-            r.width = cx = obs_source_get_width(source)
-            r.height = cy = obs_source_get_height(source)
+            r.width = cx = obs_source_get_width(s)
+            r.height = cy = obs_source_get_height(s)
 
             texrender = gs_texrender_create(color_depth, GS_ZS_NONE)
             gs_texrender_reset(texrender)
@@ -128,9 +154,9 @@ def render_source_to_data(str source_name, uint32_t color_depth=GS_R8):
                 gs_ortho(0.0, cx, 0.0, cy, -100.0, 100.0)
                 gs_blend_state_push()
                 gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO)
-                obs_source_inc_showing(source)
-                obs_source_video_render(source)
-                obs_source_dec_showing(source)
+                obs_source_inc_showing(s)
+                obs_source_video_render(s)
+                obs_source_dec_showing(s)
                 gs_blend_state_pop()
             finally:
                 gs_texrender_end(texrender)
@@ -148,3 +174,25 @@ def render_source_to_data(str source_name, uint32_t color_depth=GS_R8):
         if texrender:
             gs_texrender_destroy(texrender)
         obs_leave_graphics()
+
+
+def get_property_names(size_t properties, size_t if_set_in_data=0):
+    cdef void *ps = <void *>properties
+    cdef void *data = <void *>if_set_in_data
+
+    cdef void *p = obs_properties_first(ps)
+    cdef bytes n
+    r = []
+    while p:
+        if data:
+            pass # TODO
+        n = obs_property_name(p)
+        if n:
+            r.append(n.decode("utf-8"))
+            if OBS_PROPERTY_GROUP == obs_property_get_type(p):
+                ps2 = obs_property_group_content(p)
+                if ps2:
+                    r.extend(get_property_names(<size_t>ps2, if_set_in_data))
+        if not obs_property_next(&p):
+            p = NULL
+    return r

@@ -2,23 +2,60 @@ import obspython as _obs
 import pathlib
 
 from . import data as _data
+from . import _helper
 from .source import Source as _Source
 
-def render(elements):
+def render(elements, on_changed):
     p = _obs.obs_properties_create()
     for e in elements:
-        e._add(p)
+        e._add(p, on_changed)
     return p
 
 
-def _apply_flags(p, source):
-    if source.doc:
-        _obs.obs_property_set_long_description(p, source.doc)
-    _obs.obs_property_set_visible(p, source.visible)
-    _obs.obs_property_set_enabled(p, source.enabled)
+class _Property:
+    def __init__(self, name, text, doc=None, visible=True, enabled=True):
+        self.__property = None
+        self.name = name
+        self.text = text
+        self.doc = doc
+        self.visible = visible
+        self.enabled = enabled
+
+    def _add(self, p, on_changed):
+        self.__property = p
+        if self.doc:
+            _obs.obs_property_set_long_description(p, self.doc)
+        _obs.obs_property_set_visible(p, self.visible)
+        _obs.obs_property_set_enabled(p, self.enabled)
+        if on_changed:
+            _obs.obs_property_set_modified_callback(p, on_changed)
+
+    def show(self):
+        if not self.visible:
+            self.visible = True
+            _obs.obs_property_set_visible(self.__property, True)
+
+    def hide(self):
+        if self.visible:
+            self.visible = False
+            _obs.obs_property_set_visible(self.__property, False)
+
+    def enable(self):
+        if not self.enabled:
+            self.enabled = True
+            _obs.obs_property_set_enabled(self.__property, True)
+
+    def disable(self):
+        if self.enabled:
+            self.enabled = False
+            _obs.obs_property_set_enabled(self.__property, False)
+
+    def get(self, data):
+        v = self._get(data)
+        return v.get(self.name, None)
 
 
-class Group:
+class Group(_Property):
     """Defines a group box that contains other properties.
 
     The entire group may be checked/unchecked, which appears in the current values
@@ -27,28 +64,24 @@ class Group:
     Be aware that all members of the group appear at the top level of the set
     values. The nesting is for UI only.
     """
-    def __init__(self, name, text, checkable=False, elements=None, default=True,
+    def __init__(self, name, text, checkable=False, elements=None, default=True, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         if elements is None:
             raise ValueError("A list of elements must be provided")
         self.elements = list(elements)
         self.checkable = checkable
         self.default = default
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         flags = _obs.OBS_GROUP_NORMAL
         if self.checkable:
             flags = _obs.OBS_GROUP_CHECKABLE
         p = _obs.obs_properties_create()
         for e in self.elements:
-            e._add(p)
+            e._add(p, on_changed)
         g = _obs.obs_properties_add_group(props, self.name, self.text, flags, p)
-        _apply_flags(g, self)
+        super()._add(g, on_changed)
 
     def _default(self):
         d = {self.name: self.default}
@@ -63,27 +96,23 @@ class Group:
         return d
 
 
-class Text:
+class Text(_Property):
     """Defines a text field."""
-    def __init__(self, name, text, password=False, multiline=False, default="",
+    def __init__(self, name, text, password=False, multiline=False, default="", *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.password = password
         self.multiline = multiline
         self.default = default
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         flags = _obs.OBS_TEXT_DEFAULT
         if self.multiline:
             flags = _obs.OBS_TEXT_MULTILINE
         if self.password:
             flags = _obs.OBS_TEXT_PASSWORD
-        p = _obs.obs_properties_add_text(props, self.name, self.text, flags)
-        _apply_flags(p, self)
+        self._property = p = _obs.obs_properties_add_text(props, self.name, self.text, flags)
+        super()._add(p, on_changed)
 
     def _default(self):
         return {self.name: self.default}
@@ -92,20 +121,16 @@ class Text:
         return {self.name: _obs.obs_data_get_string(data, self.name)}
 
 
-class Checkbox:
+class Checkbox(_Property):
     """Defines a boolean field, which appears as a checkbox."""
-    def __init__(self, name, text, default=False,
+    def __init__(self, name, text, default=False, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.default = default
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
-        p = _obs.obs_properties_add_bool(props, self.name, self.text)
-        _apply_flags(p, self)
+    def _add(self, props, on_changed):
+        self._property = p = _obs.obs_properties_add_bool(props, self.name, self.text)
+        super()._add(p, on_changed)
 
     def _default(self):
         return {self.name: self.default}
@@ -114,7 +139,7 @@ class Checkbox:
         return {self.name: _obs.obs_data_get_bool(data, self.name)}
 
 
-class Number:
+class Number(_Property):
     """Defines a number field or slider.
 
     The type of number is inferred from the provided min/max/step/defaults, and
@@ -125,10 +150,9 @@ class Number:
     """
     _float = float
 
-    def __init__(self, name, text, minimum, maximum, step=1, float=False, scroller=False, slider=False, default=None,
+    def __init__(self, name, text, minimum, maximum, step=1, float=False, scroller=False, slider=False, default=None, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         t = int
         if float or isinstance(default, self._float) or isinstance(maximum - minimum + step, self._float):
             t = self._float
@@ -139,17 +163,14 @@ class Number:
         self.scroller = (scroller or not slider)
         self.slider = not self.scroller
         self.default = self.min
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         if self.type is float:
             F = _obs.obs_properties_add_float_slider if self.slider else _obs.obs_properties_add_float
         else:
             F = _obs.obs_properties_add_int_slider if self.slider else _obs.obs_properties_add_int
-        p = F(props, self.name, self.text, self.min, self.max, self.step)
-        _apply_flags(p, self)
+        self._property = p = F(props, self.name, self.text, self.min, self.max, self.step)
+        super()._add(p, on_changed)
 
     def _default(self):
         return {self.name: self.default}
@@ -162,7 +183,7 @@ class Number:
         return {self.name: v}
 
 
-class Path:
+class Path(_Property):
     """Create a path element, which requires users to browse to get the value.
 
     By default, the Browse button will only open existing files. Pass 'save_file=True'
@@ -174,27 +195,23 @@ class Path:
     The value from this element will be a 'pathlib.Path' object or None.
     """
     def __init__(self, name, text, open_file=False, save_file=False, open_directory=False,
-                 filter="All Files (*.*)", default=None,
+                 filter="All Files (*.*)", default=None, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.open_file = open_file or not (save_file or open_directory)
         self.save_file = save_file and not self.open_file
         self.open_directory = open_directory and not self.open_file
         self.filter = filter
         self.default = str(default or "")
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         t = _obs.OBS_PATH_FILE
         if self.save_file:
             t = _obs.OBS_PATH_FILE_SAVE
         elif self.open_directory:
             t = _obs.OBS_PATH_DIRECTORY
         p = _obs.obs_properties_add_path(props, self.name, self.text, t, self.filter, self.default)
-        _apply_flags(p, self)
+        super()._add(p, on_changed)
 
     def _default(self):
         return {self.name: pathlib.Path(self.default) if self.default else None}
@@ -216,24 +233,20 @@ def _pairs(items):
             yield i, i
 
 
-class DropDown:
+class DropDown(_Property):
     """Create a dropdown list element.
 
     'type' may be str, int or float, and all items will be converted to that type.
     """
-    def __init__(self, name, text, editable=False, type=str, items=None, default=None,
+    def __init__(self, name, text, editable=False, type=str, items=None, default=None, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.editable = editable
         self.type = {str: str, int: int, float: float}.get(type, str)
         self.items = items
         self.default = default
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         flag = _obs.OBS_COMBO_TYPE_EDITABLE if self.editable else _obs.OBS_COMBO_TYPE_LIST
         fmt = _obs.OBS_COMBO_FORMAT_STRING
         add = _obs.obs_property_list_add_string
@@ -246,7 +259,7 @@ class DropDown:
             fmt = _obs.OBS_COMBO_FORMAT_FLOAT
             add = _obs.obs_property_list_add_float
         p = _obs.obs_properties_add_list(props, self.name, self.text, flag, fmt)
-        _apply_flags(p, self)
+        super()._add(p, on_changed)
 
         for k, v in _pairs(self.items):
             add(p, str(k), self.type(v))
@@ -264,23 +277,19 @@ class DropDown:
         return {self.name: v}
 
 
-class ColorPicker:
+class ColorPicker(_Property):
     """Create a color picker element.
 
     Colors are represented as 24-bit integer values 0xBBGGRR.
     """
-    def __init__(self, name, text, default=0xFFFFFF,
+    def __init__(self, name, text, default=0xFFFFFF, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.default = default
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         p = _obs.obs_properties_add_color(props, self.name, self.text)
-        _apply_flags(p, self)
+        super()._add(p, on_changed)
 
     def _default(self):
         return {self.name: self.default}
@@ -294,23 +303,19 @@ def _button_call(properties, btn):
     return bool(cb())
 
 
-class Button:
+class Button(_Property):
     """Create a button element with a callback."""
     CALLBACKS = {}
 
-    def __init__(self, name, text, callback,
+    def __init__(self, name, text, callback, *,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.callback = callback
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         self.CALLBACKS[self.name] = self.callback
         p = _obs.obs_properties_add_button(props, self.name, self.text, _button_call)
-        _apply_flags(p, self)
+        super()._add(p, None)
 
     def _default(self):
         return {}
@@ -320,7 +325,7 @@ class Button:
 
 
 
-class Migrate:
+class Migrate(_Property):
     """Create a migration element.
 
     Migration elements do not appear in the UI, but will read previously stored properties
@@ -335,12 +340,12 @@ class Migrate:
     If 'new_name' is omitted, the value is made available as its old name.
     """
     def __init__(self, name, old_type, new_name=None, convert=None):
-        self.name = name
+        super().__init__(name, "", None, False, True)
         self.old_type = old_type
         self.new_name = new_name
         self.convert = convert
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         if self.old_type is bool:
             p = _obs.obs_property_add_bool(props, self.name, self.name)
         elif self.old_type is int:
@@ -352,7 +357,7 @@ class Migrate:
             p = _obs.obs_property_add_text(props, self.name, self.name, _obs.OBS_TEXT_DEFAULT)
         else:
             raise TypeError("unsupported migration type: {}".format(self.old_type))
-        _obs.obs_property_set_visible(p, False)
+        super()._add(p, on_changed)
 
     def _default(self):
         return {}
@@ -386,7 +391,7 @@ def _contains_pattern(s, patterns):
     return False
 
 
-class SourceList:
+class SourceList(_Property):
     """Create a list of sources matching certain kinds.
 
     Each kind is either a 'perfect match', 'prefix*', '*suffix', or '*substring*' of
@@ -396,20 +401,17 @@ class SourceList:
     """
     def __init__(self, name, text, *kinds, editable=False,
                  doc=None, visible=True, enabled=True):
-        self.name = name
-        self.text = text
+        super().__init__(name, text, doc, visible, enabled)
         self.kinds = kinds
         self.editable = editable
-        self.doc = doc
-        self.visible = visible
-        self.enabled = enabled
 
-    def _add(self, props):
+    def _add(self, props, on_changed):
         flag = _obs.OBS_COMBO_TYPE_EDITABLE if self.editable else _obs.OBS_COMBO_TYPE_LIST
         fmt = _obs.OBS_COMBO_FORMAT_STRING
         p = _obs.obs_properties_add_list(props, self.name, self.text, flag, fmt)
-        _apply_flags(p, self)
+        super()._add(p, on_changed)
 
+        _obs.obs_property_list_add_string(p, "(None)", None)
         sources = _obs.obs_enum_sources()
         if sources is not None:
             try:
@@ -431,44 +433,58 @@ class SourceList:
 
 class TextSources(SourceList):
     "A list of text sources."
-    def __init__(self, name, text):
-        super().__init__(name, text, "text_*")
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, "text_*",
+                         doc=doc, visible=visible, enabled=enabled)
 
 
 class AudioSources(SourceList):
     "A list of audio sources."
-    def __init__(self, name, text):
-        super().__init__(name, text, "wasapi_*")
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, "wasapi_*",
+                         doc=doc, visible=visible, enabled=enabled)
 
 
 class VideoSources(SourceList):
     "A list of video sources."
-    def __init__(self, name, text, include_media=True):
+    def __init__(self, name, text, include_media=True, *,
+                 doc=None, visible=True, enabled=True):
         kinds = ("dshow_input", "streamfx-source-mirror")
         if include_media:
             kinds += ("ffmpeg_*",)
-        super().__init__(name, text, *kinds)
+        super().__init__(name, text, *kinds,
+                         doc=doc, visible=visible, enabled=enabled)
 
 
 class MediaSources(SourceList):
     "A list of media sources."
-    def __init__(self, name, text):
-        super().__init__(name, text, "ffmpeg_*")
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, "ffmpeg_*",
+                         doc=doc, visible=visible, enabled=enabled)
 
 
 class ImageSources(SourceList):
     "A list of image sources."
-    def __init__(self, name, text):
-        super().__init__(name, text, "image_source")
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, "image_source",
+                         doc=doc, visible=visible, enabled=enabled)
 
 
 class ColorSources(SourceList):
     "A list of color sources."
-    def __init__(self, name, text):
-        super().__init__(name, text, "color_source")
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, "color_source",
+                         doc=doc, visible=visible, enabled=enabled)
 
 
 class SourceGroups(SourceList):
     "A list of groups."
-    def __init__(self, name, text):
-        super().__init__(name, text, "group")
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, "group",
+                         doc=doc, visible=visible, enabled=enabled)
