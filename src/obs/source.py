@@ -87,3 +87,11 @@ class Source:
 
     def adjust_crop(self, d_left, d_right, d_top, d_bottom):
         self._do("obs_source_adjust_crop", (d_left, d_right, d_top, d_bottom))
+
+    def get_sync_offset(self):
+        f = Future()
+        self._do("obs_source_get_sync_offset", future=f)
+        return f.result()
+
+    def set_sync_offset(self, offset):
+        self._do("obs_source_set_sync_offset", offset)

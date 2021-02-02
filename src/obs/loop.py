@@ -234,4 +234,13 @@ class Loop:
         _obs.obs_sceneitem_set_crop(si, crop)
 
 
+    def _obs_source_get_sync_offset(self, source_name):
+        with self._source_by_name(source_name) as s:
+            return _obs.obs_source_get_sync_offset(s)
+
+    def _obs_source_set_sync_offset(self, source_name, offset):
+        with self._source_by_name(source_name) as s:
+            _obs.obs_source_set_sync_offset(s, offset)
+
+
 LOOP = Loop()

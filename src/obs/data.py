@@ -67,7 +67,7 @@ _SET_DEFAULT_FUNC = {
     float: _obs.obs_data_set_default_double,
     str: _set_default_string,
     dict: _set_default_obj,
-    type(None): _erase,
+    type(None): lambda *_: None,
 }
 
 
