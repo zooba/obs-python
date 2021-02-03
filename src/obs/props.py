@@ -162,7 +162,7 @@ class Number(_Property):
         self.step = t(step)
         self.scroller = (scroller or not slider)
         self.slider = not self.scroller
-        self.default = self.min
+        self.default = default if default is not None else self.min
 
     def _add(self, props, on_changed):
         if self.type is float:
@@ -189,8 +189,8 @@ class Path(_Property):
     By default, the Browse button will only open existing files. Pass 'save_file=True'
     to allow specifying non-existent files, or 'open_directory=True' to select a folder.
 
-    'filter' is a single 'Text (*.ext;*.ex2)' style string to be used when opening or
-    saving files.
+    'filter' is a string containing 'Text (*.ext;*.ex2)' style filters to be used when
+    opening or saving files. Each filter must be separated by two semicolons ';;'.
 
     The value from this element will be a 'pathlib.Path' object or None.
     """

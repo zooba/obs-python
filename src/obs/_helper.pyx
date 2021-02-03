@@ -1,74 +1,10 @@
 
 # cython: language_level=3
 
-cdef extern from "Windows.h" nogil:
-    ctypedef void *HMODULE
-    cdef HMODULE GetModuleHandleA(const char*)
-    cdef void *GetProcAddress(HMODULE, const char*)
+from _obs cimport *
+from cpython.ref cimport PyObject
 
-cdef extern from "stdint.h" nogil:
-    ctypedef int uint32_t
-    ctypedef int uint8_t
-
-cdef extern from "stdbool.h" nogil:
-    ctypedef bint bool
-
-cdef extern from "graphics/vec4.h" nogil:
-    cdef struct vec4:
-        pass
-    void vec4_zero(vec4* v)
-
-cdef extern from "obs.h" nogil:
-    uint32_t GS_A8, GS_R8
-    uint32_t GS_ZS_NONE
-    uint32_t GS_CLEAR_COLOR, GS_CLEAR_DEPTH
-    uint32_t GS_BLEND_ZERO, GS_BLEND_ONE
-
-    void* gs_texrender_create(uint32_t color_format, uint32_t z_stencil_format)
-    int gs_texrender_begin(void *texrender, uint32_t width, uint32_t height)
-    void gs_texrender_end(void *texrender)
-    void gs_texrender_destroy(void *texrender)
-    void gs_texrender_reset(void *texrender)
-    void* gs_texrender_get_texture(void *texrender)
-
-    void gs_stage_texture(void* surface, void* texture)
-    void* gs_stagesurface_create(uint32_t width, uint32_t height, uint32_t color_format)
-    uint32_t gs_stagesurface_get_width(void* surface)
-    uint32_t gs_stagesurface_get_height(void* surface)
-    uint32_t gs_stagesurface_get_color_format(void* surface)
-    void gs_stagesurface_map(void* surface, void* out_data, void* out_stride)
-    void gs_stagesurface_unmap(void* surface)
-    void gs_stagesurface_destroy(void* surface)
-
-    void gs_clear(uint32_t flags, vec4* color, float depth, uint8_t stencil)
-    void gs_ortho(float left, float right, float top, float bottom, float znear, float zfar)
-
-    void gs_blend_state_push()
-    void gs_blend_state_pop()
-    void gs_blend_function(uint32_t src, uint32_t dest)
-
-    void obs_enter_graphics()
-    void obs_leave_graphics()
-
-    void* obs_get_source_by_name(const char* name)
-    uint32_t obs_source_get_width(void* source)
-    uint32_t obs_source_get_height(void* source)
-    void obs_source_inc_showing(void* source)
-    void obs_source_video_render(void* source)
-    void obs_source_dec_showing(void* source)
-
-
-    uint32_t OBS_PROPERTY_GROUP
-
-    void* obs_properties_first(void* props);
-    bool obs_property_next(void** p)
-    const char *obs_property_name(void* p)
-    bool obs_property_enabled(void* p)
-    bool obs_property_visible(void* p)
-    uint32_t obs_property_get_type(void* p)
-    bool obs_property_modified(void* p, void* data)
-    void* obs_property_group_content(void* p)
-
+import sys
 
 cdef class RenderedData:
     cdef void *stagesurf
@@ -176,23 +112,85 @@ def render_source_to_data(size_t source, uint32_t color_depth=GS_R8):
         obs_leave_graphics()
 
 
-def get_property_names(size_t properties, size_t if_set_in_data=0):
+def get_property_names(size_t properties):
     cdef void *ps = <void *>properties
-    cdef void *data = <void *>if_set_in_data
 
     cdef void *p = obs_properties_first(ps)
     cdef bytes n
     r = []
     while p:
-        if data:
-            pass # TODO
         n = obs_property_name(p)
         if n:
             r.append(n.decode("utf-8"))
             if OBS_PROPERTY_GROUP == obs_property_get_type(p):
                 ps2 = obs_property_group_content(p)
                 if ps2:
-                    r.extend(get_property_names(<size_t>ps2, if_set_in_data))
+                    r.extend(get_property_names(<size_t>ps2))
         if not obs_property_next(&p):
-            p = NULL
+            break
     return r
+
+
+def read_data(size_t data, names):
+    cdef void *d =  obs_data_first(<void*>data)
+    cdef void *o
+    cdef str n
+    cdef bytes s
+    cdef uint32_t dtype
+    r = {}
+    while d:
+        n = obs_data_item_get_name(d).decode()
+        if not names or n in names:
+            dtype = obs_data_item_gettype(d)
+            if dtype == OBS_DATA_NULL:
+                r[n] = None
+            elif dtype == OBS_DATA_STRING:
+                s = obs_data_item_get_string(d)
+                r[n] = s.decode()
+            elif dtype == OBS_DATA_NUMBER:
+                dtype = obs_data_item_numtype(d)
+                if dtype == OBS_DATA_NUM_INT:
+                    r[n] = obs_data_item_get_int(d)
+                elif dtype == OBS_DATA_NUM_DOUBLE:
+                    r[n] = obs_data_item_get_double(d)
+                else:
+                    r[n] = f"Unhandled numtype: {dtype}"
+            elif dtype == OBS_DATA_BOOLEAN:
+                r[n] = obs_data_item_get_bool(d)
+            elif dtype == OBS_DATA_OBJECT:
+                o = obs_data_item_get_obj(d)
+                r[n] = read_data(<size_t>o, None)
+                obs_data_release(o)
+            elif dtype == OBS_DATA_ARRAY:
+                o = obs_data_item_get_array(d)
+                r[n] = read_data_array(<size_t>o)
+                obs_data_array_release(o)
+            else:
+                r[n] = f"Unhandled type: {dtype}"
+        if not obs_data_item_next(&d):
+            break
+    return r
+
+
+def read_data_array(size_t data_array):
+    cdef void *d = <void*>data_array
+    r = []
+    for i in range(obs_data_array_count(d)):
+        r.append(read_data(<size_t>obs_data_array_item(d, i), None))
+    return r
+
+cdef void _append_filter_data(void *source, void *filter, void *list_obj) nogil:
+    cdef const char *name = obs_source_get_name(filter)
+    cdef const char *kind = obs_source_get_unversioned_id(filter)
+    cdef PyObject *list_ = <PyObject*>list_obj
+    with gil:
+        try:
+            (<list>list_).append((name.decode(), kind.decode()))
+        except Exception as ex:
+            print("Unhandled", ex, file=sys.stderr)
+
+def get_filter_names(size_t source):
+    cdef void *source_ = <void*>source
+    cdef list result = list()
+    obs_source_enum_filters(source_, <obs_source_enum_proc_t>_append_filter_data, <PyObject*>result)
+    return result

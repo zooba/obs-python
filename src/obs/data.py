@@ -1,34 +1,17 @@
 import obspython as _obs
 import sys
 
-
-def _item_get_number(item):
-    ntype = _obs.obs_data_item_numtype(item)
-    if ntype == _obs.OBS_DATA_NUM_INT:
-        return _obs.obs_data_item_get_int(item)
-    elif ntype == _obs.OBS_DATA_NUM_DOUBLE:
-        return _obs.obs_data_item_get_double(item)
-    raise TypeError("unsupported numeric type")
-
-
-_ITEM_GET_FUNC = {
-    _obs.OBS_DATA_NUMBER: _item_get_number,
-    _obs.OBS_DATA_STRING: _obs.obs_data_item_get_string,
-    _obs.OBS_DATA_BOOLEAN: _obs.obs_data_item_get_bool,
-    _obs.OBS_DATA_NULL: (lambda *_: None),
-}
+from . import _helper
 
 
 def get_value(data, key):
     """Gets the value of item 'key' from OBS data object 'data'"""
-    item = _obs.obs_data_item_byname(data, key)
-    if item is None:
-        raise LookupError(key)
-    kind = _obs.obs_data_item_gettype(item)
-    try:
-        return _ITEM_GET_FUNC[kind](item)
-    except LookupError:
-        raise TypeError("unsupported data type")
+    return get_values(data, [key])[key]
+
+
+def get_values(data, keys=None):
+    """Gets a dict containing all keys and values from OBS data object 'data'"""
+    return _helper.read_data(data, keys)
 
 
 def _erase(data, key, obj):
@@ -67,7 +50,7 @@ _SET_DEFAULT_FUNC = {
     float: _obs.obs_data_set_default_double,
     str: _set_default_string,
     dict: _set_default_obj,
-    type(None): _erase,
+    type(None): lambda *_: None,
 }
 
 

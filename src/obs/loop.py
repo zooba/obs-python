@@ -141,6 +141,18 @@ class Loop:
             raise LookupError("no source named {}".format(name))
         return _SourceReleaser(s)
 
+    def _filter_by_name(self, source_name, filter_name):
+        s = _obs.obs_get_source_by_name(source_name)
+        if not s:
+            raise LookupError("no source named {}".format(source_name))
+        try:
+            f = _obs.obs_source_get_filter_by_name(s, filter_name)
+            if not f:
+                raise LookupError("no filter named {} on source {}".format(filter_name, source_name))
+            return _SourceReleaser(f)
+        finally:
+            _obs.obs_source_release(s)
+
     def _sceneitem_by_name(self, name, scene=None):
         if scene is None:
             scene_s = _obs.obs_frontend_get_current_scene()
@@ -177,18 +189,39 @@ class Loop:
             return _obs.obs_source_get_unversioned_id(s)
 
     def _obs_source_get_property_values(self, source_name):
-        pass
+        with self._source_by_name(source_name) as s:
+            d = _obs.obs_source_get_settings(s)
+            try:
+                return _data.get_values(d)
+            finally:
+                _obs.obs_data_release(d)
 
     def _obs_source_set_property_values(self, source_name, values):
         with self._source_by_name(source_name) as s:
             d = _obs.obs_data_create()
             try:
-                for k, v in values.items():
-                    if isinstance(v, str):
-                        _obs.obs_data_set_string(d, k, v)
+                _data.set_data(d, values.items())
                 _obs.obs_source_update(s, d)
             finally:
                 _obs.obs_data_release(d)
+
+    def _obs_filter_get_property_values(self, filter_name, owner_name):
+        with self._filter_by_name(owner_name, filter_name) as s:
+            d = _obs.obs_source_get_settings(s)
+            try:
+                return _data.get_values(d)
+            finally:
+                _obs.obs_data_release(d)
+
+    def _obs_filter_set_property_values(self, filter_name, owner_name, values):
+        with self._filter_by_name(owner_name, filter_name) as s:
+            d = _obs.obs_data_create()
+            try:
+                _data.set_data(d, values.items())
+                _obs.obs_source_update(s, d)
+            finally:
+                _obs.obs_data_release(d)
+
 
 
     def _obs_source_get_frame_data(self, source_name):
@@ -232,6 +265,21 @@ class Loop:
         crop = _obs.obs_sceneitem_crop()
         crop.left, crop.right, crop.top, crop.bottom = crop_sizes
         _obs.obs_sceneitem_set_crop(si, crop)
+
+
+    def _obs_source_get_sync_offset(self, source_name):
+        with self._source_by_name(source_name) as s:
+            return _obs.obs_source_get_sync_offset(s)
+
+    def _obs_source_set_sync_offset(self, source_name, offset):
+        with self._source_by_name(source_name) as s:
+            _obs.obs_source_set_sync_offset(s, offset)
+
+
+    def _obs_source_get_filters(self, source_name, filter_cls):
+        with self._source_by_name(source_name) as s:
+            return [filter_cls(n, k)
+                    for n, k in _helper.get_filter_names(s)]
 
 
 LOOP = Loop()
