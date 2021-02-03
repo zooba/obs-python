@@ -2,6 +2,9 @@
 # cython: language_level=3
 
 from _obs cimport *
+from cpython.ref cimport PyObject
+
+import sys
 
 cdef class RenderedData:
     cdef void *stagesurf
@@ -109,23 +112,85 @@ def render_source_to_data(size_t source, uint32_t color_depth=GS_R8):
         obs_leave_graphics()
 
 
-def get_property_names(size_t properties, size_t if_set_in_data=0):
+def get_property_names(size_t properties):
     cdef void *ps = <void *>properties
-    cdef void *data = <void *>if_set_in_data
 
     cdef void *p = obs_properties_first(ps)
     cdef bytes n
     r = []
     while p:
-        if data:
-            pass # TODO
         n = obs_property_name(p)
         if n:
             r.append(n.decode("utf-8"))
             if OBS_PROPERTY_GROUP == obs_property_get_type(p):
                 ps2 = obs_property_group_content(p)
                 if ps2:
-                    r.extend(get_property_names(<size_t>ps2, if_set_in_data))
+                    r.extend(get_property_names(<size_t>ps2))
         if not obs_property_next(&p):
-            p = NULL
+            break
     return r
+
+
+def read_data(size_t data, names):
+    cdef void *d =  obs_data_first(<void*>data)
+    cdef void *o
+    cdef str n
+    cdef bytes s
+    cdef uint32_t dtype
+    r = {}
+    while d:
+        n = obs_data_item_get_name(d).decode()
+        if not names or n in names:
+            dtype = obs_data_item_gettype(d)
+            if dtype == OBS_DATA_NULL:
+                r[n] = None
+            elif dtype == OBS_DATA_STRING:
+                s = obs_data_item_get_string(d)
+                r[n] = s.decode()
+            elif dtype == OBS_DATA_NUMBER:
+                dtype = obs_data_item_numtype(d)
+                if dtype == OBS_DATA_NUM_INT:
+                    r[n] = obs_data_item_get_int(d)
+                elif dtype == OBS_DATA_NUM_DOUBLE:
+                    r[n] = obs_data_item_get_double(d)
+                else:
+                    r[n] = f"Unhandled numtype: {dtype}"
+            elif dtype == OBS_DATA_BOOLEAN:
+                r[n] = obs_data_item_get_bool(d)
+            elif dtype == OBS_DATA_OBJECT:
+                o = obs_data_item_get_obj(d)
+                r[n] = read_data(<size_t>o, None)
+                obs_data_release(o)
+            elif dtype == OBS_DATA_ARRAY:
+                o = obs_data_item_get_array(d)
+                r[n] = read_data_array(<size_t>o)
+                obs_data_array_release(o)
+            else:
+                r[n] = f"Unhandled type: {dtype}"
+        if not obs_data_item_next(&d):
+            break
+    return r
+
+
+def read_data_array(size_t data_array):
+    cdef void *d = <void*>data_array
+    r = []
+    for i in range(obs_data_array_count(d)):
+        r.append(read_data(<size_t>obs_data_array_item(d, i), None))
+    return r
+
+cdef void _append_filter_data(void *source, void *filter, void *list_obj) nogil:
+    cdef const char *name = obs_source_get_name(filter)
+    cdef const char *kind = obs_source_get_unversioned_id(filter)
+    cdef PyObject *list_ = <PyObject*>list_obj
+    with gil:
+        try:
+            (<list>list_).append((name.decode(), kind.decode()))
+        except Exception as ex:
+            print("Unhandled", ex, file=sys.stderr)
+
+def get_filter_names(size_t source):
+    cdef void *source_ = <void*>source
+    cdef list result = list()
+    obs_source_enum_filters(source_, <obs_source_enum_proc_t>_append_filter_data, <PyObject*>result)
+    return result

@@ -58,10 +58,14 @@ cdef extern from "obs.h" nogil:
     void obs_source_video_render(void* source)
     void obs_source_dec_showing(void* source)
 
+    const char* obs_source_get_name(void* source)
+    const char* obs_source_get_unversioned_id(void* source)
+    ctypedef void (*obs_source_enum_proc_t)(void*, void*, void*)
+    void obs_source_enum_filters(void* source, obs_source_enum_proc_t callback, void* data)
 
     uint32_t OBS_PROPERTY_GROUP
 
-    void* obs_properties_first(void* props);
+    void* obs_properties_first(void* props)
     bool obs_property_next(void** p)
     const char *obs_property_name(void* p)
     bool obs_property_enabled(void* p)
@@ -70,3 +74,24 @@ cdef extern from "obs.h" nogil:
     bool obs_property_modified(void* p, void* data)
     void* obs_property_group_content(void* p)
 
+    uint32_t OBS_DATA_NULL, OBS_DATA_STRING, OBS_DATA_NUMBER, OBS_DATA_BOOLEAN
+    uint32_t OBS_DATA_OBJECT, OBS_DATA_ARRAY
+    uint32_t OBS_DATA_NUM_INVALID, OBS_DATA_NUM_INT, OBS_DATA_NUM_DOUBLE
+
+    void* obs_data_first(void* data)
+    void obs_data_release(void* data)
+
+    bool obs_data_item_next(void** d)
+    const char *obs_data_item_get_name(void* d)
+    uint32_t obs_data_item_gettype(void* d)
+    uint32_t obs_data_item_numtype(void* d)
+    const char *obs_data_item_get_string(void* d)
+    uint64_t obs_data_item_get_int(void* d)
+    double obs_data_item_get_double(void* d)
+    bint obs_data_item_get_bool(void* d)
+    void* obs_data_item_get_obj(void* d)
+    void* obs_data_item_get_array(void* d)
+
+    size_t obs_data_array_count(void* array)
+    void* obs_data_array_item(void* array, size_t i)
+    void obs_data_array_release(void* array)

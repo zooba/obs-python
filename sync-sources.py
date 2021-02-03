@@ -8,10 +8,6 @@ SOURCE_IDS = range(1, 11)
 VALUES = {}
 
 
-def do_reset():
-    pass
-
-
 def _generate_properties(ids):
     for i in ids:
         yield OP.SourceList(f"source{i}", f"Source {i}")
@@ -19,15 +15,23 @@ def _generate_properties(ids):
 
 
 PROPERTIES = [
-    OP.Button("reset", "Reset", do_reset),
     *_generate_properties(SOURCE_IDS)
 ]
 
 
 def set_sync_delay(source, delay):
-    type = source.get_type()
-    print(source.get_sync_offset() / 1000000, "to", delay)
-    source.set_sync_offset(delay * 1000000)
+    if not (-10000 < delay < 10000):
+        #print("Invalid delay:", delay)
+        return
+    for f in source.get_filters():
+        if f.get_type() in {"async_delay_filter", "gpu_delay"}:
+            #print(source.name, f["delay_ms",].get("delay_ms", 0), "to", delay, "(video)")
+            f["delay_ms"] = delay
+            source.set_sync_offset(0)
+            break
+    else:
+        #print(source.name, source.get_sync_offset() / 1000000, "to", delay, "(audio)")
+        source.set_sync_offset(delay * 1000000)
 
 
 def do_update():
