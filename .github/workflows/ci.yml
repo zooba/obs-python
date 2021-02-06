@@ -45,13 +45,13 @@ jobs:
         uses: papeloto/action-zip@v1
         with:
           files: out/python
-          dest: amd64.zip
+          dest: win64.zip
       - name: Upload to release
         if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ github.token }}
-          file: amd64.zip
-          asset_name: amd64.zip
+          file: win64.zip
+          asset_name: win64.zip
           tag: ${{ github.ref }}
           overwrite: true

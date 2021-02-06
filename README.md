@@ -10,7 +10,7 @@ Unfortunately, given how OBS configuration works, there's no real installation f
 
 For now, here are the install steps (Windows 64-bit only):
 
-1. Go to [this CI page](https://github.com/zooba/obs-python/actions?query=workflow%3ACI+is%3Asuccess+branch%3Amaster) and select the most recent (top) run
+1. Go to [the releases page](https://github.com/zooba/obs-python/releases) and select the most recent release
 2. Download the `win64` artifact. It appears at the bottom of the run page.
 3. Extract the ZIP file anywhere on your system, but remember where you put it.
 4. In OBS, open "Tools" - "Scripts".
