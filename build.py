@@ -4,10 +4,11 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 from pathlib import Path
 from urllib.request import urlopen, urlretrieve
-from zipfile import ZipFile
+from zipfile import ZipFile, ZIP_LZMA
 
 ROOT = Path(__file__).absolute().parent
 SRC = ROOT / "src"
@@ -88,6 +89,18 @@ def download_obs_source(outdir, tmpdir):
     os.environ["OBS_SOURCE"] = str(out)
 
 
+def rmtree(path):
+    for _ in range(5):
+        if Path(path).is_dir():
+            try:
+                shutil.rmtree(path)
+            except OSError as ex:
+                print(ex)
+                time.sleep(1.0)
+            else:
+                break
+
+
 def build_windows_package(outdir, tmpdir):
     download_obs_source(outdir, tmpdir)
     subprocess.run(
@@ -101,6 +114,7 @@ def build_windows_package(outdir, tmpdir):
         },
         check=True,
     )
+
 
 def build_windows(outdir, tmpdir, editable):
     pydir = outdir / "python"
@@ -116,15 +130,27 @@ def build_windows(outdir, tmpdir, editable):
     for pkname, pkver in INSTALL:
         extract_whl(pkname, pkver, PACKAGE_FILTER.get(pkname, ()), pydir, tmpdir)
 
+    rmtree(pydir / "obs")
+
     if editable:
         with open(pydir / "python36._pth", "w", encoding="utf-8") as f:
             print(".", file=f)
             print("python36.zip", file=f)
             print(SRC, file=f)
-        if (pydir / "obs").is_dir():
-            shutil.rmtree(pydir / "obs")
     else:
+        with open(pydir / "python36._pth", "w", encoding="utf-8") as f:
+            print(".", file=f)
+            print("python36.zip", file=f)
+
         shutil.copytree(SRC / "obs", pydir / "obs", dirs_exist_ok=True)
+
+        outfile = outdir / "obs-python-win64.zip"
+        files = list(pydir.glob("**/*"))
+        print("Storing", len(files), "files to", outfile)
+        with ZipFile(outfile, mode="w", compression=ZIP_LZMA) as zf:
+            for f in files:
+                zf.write(f, f.relative_to(pydir))
+        print("Wrote", outfile)
 
 
 if __name__ == "__main__":

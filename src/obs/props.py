@@ -64,7 +64,7 @@ class Group(_Property):
     Be aware that all members of the group appear at the top level of the set
     values. The nesting is for UI only.
     """
-    def __init__(self, name, text, checkable=False, elements=None, default=True, *,
+    def __init__(self, name, text, elements=None, checkable=False, default=True, *,
                  doc=None, visible=True, enabled=True):
         super().__init__(name, text, doc, visible, enabled)
         if elements is None:
@@ -97,13 +97,22 @@ class Group(_Property):
 
 
 class Text(_Property):
-    """Defines a text field."""
-    def __init__(self, name, text, password=False, multiline=False, default="", *,
+    """Defines a text field.
+
+    Specify 'password' to display dots instead of typed characters. Note that
+    this only affects the UI and not the saved value on disk.
+
+    Specify 'multiline' for multiple lines, and 'monospace' to use a monospaced
+    font. Monospace is not available for single line text fields.
+    """
+    def __init__(self, name, text, default="", *,
+                 password=False, multiline=False, monospace=False,
                  doc=None, visible=True, enabled=True):
         super().__init__(name, text, doc, visible, enabled)
+        self.default = default
         self.password = password
         self.multiline = multiline
-        self.default = default
+        self.monospace = monospace
 
     def _add(self, props, on_changed):
         flags = _obs.OBS_TEXT_DEFAULT
@@ -112,6 +121,8 @@ class Text(_Property):
         if self.password:
             flags = _obs.OBS_TEXT_PASSWORD
         self._property = p = _obs.obs_properties_add_text(props, self.name, self.text, flags)
+        if self.monospace:
+            _obs.obs_property_text_set_monospace(p, True)
         super()._add(p, on_changed)
 
     def _default(self):
@@ -150,7 +161,8 @@ class Number(_Property):
     """
     _float = float
 
-    def __init__(self, name, text, minimum, maximum, step=1, float=False, scroller=False, slider=False, default=None, *,
+    def __init__(self, name, text, minimum, maximum, step=1, *,
+                 float=False, scroller=False, slider=False, default=None, suffix=None,
                  doc=None, visible=True, enabled=True):
         super().__init__(name, text, doc, visible, enabled)
         t = int
@@ -163,6 +175,7 @@ class Number(_Property):
         self.scroller = (scroller or not slider)
         self.slider = not self.scroller
         self.default = default if default is not None else self.min
+        self.suffix = suffix
 
     def _add(self, props, on_changed):
         if self.type is float:
@@ -171,6 +184,12 @@ class Number(_Property):
             F = _obs.obs_properties_add_int_slider if self.slider else _obs.obs_properties_add_int
         self._property = p = F(props, self.name, self.text, self.min, self.max, self.step)
         super()._add(p, on_changed)
+        if self.type is float:
+            if self.suffix:
+                _obs.obs_property_float_set_suffix(p, self.suffix)
+        else:
+            if self.suffix:
+                _obs.obs_property_int_set_suffix(p, self.suffix)
 
     def _default(self):
         return {self.name: self.default}
@@ -277,7 +296,46 @@ class DropDown(_Property):
         return {self.name: v}
 
 
-class ColorPicker(_Property):
+class List(_Property):
+    """Create an editable list of items."""
+
+    def __init__(self, name, text, default=None, *,
+                 files=False, urls=False, filter=None, default_path=None,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, doc, visible, enabled)
+        self.default = [
+            d if isinstance(d, dict) else {"value": d, "selected": False, "hidden": False}
+            for d in (default or ())
+        ]
+        self.files = files
+        self.urls = urls
+        self.filter = filter
+        self.default_path = default_path
+
+    def _add(self, props, on_changed):
+        fmt = _obs.OBS_EDITABLE_LIST_TYPE_STRINGS
+        if self.files:
+            fmt = _obs.OBS_EDITABLE_LIST_TYPE_FILES
+        if self.urls:
+            fmt = _obs.OBS_EDITABLE_LIST_TYPE_FILES_AND_URLS
+        p = _obs.obs_properties_add_editable_list(props, self.name, self.text, fmt, self.filter, self.default_path)
+        super()._add(p, on_changed)
+        for d in self.default:
+            _obs.obs_property_list_add_string(p, d, d)
+
+    def _default(self):
+        return {self.name: self.default}
+
+    def _get(self, data):
+        o = _obs.obs_data_get_array(data, self.name)
+        try:
+            values = [v.get("value") for v in _helper.read_data_array(o)]
+        finally:
+            _obs.obs_data_array_release(o)
+        return {self.name: values}
+
+
+class Color(_Property):
     """Create a color picker element.
 
     Colors are represented as 24-bit integer values 0xBBGGRR.
@@ -296,6 +354,45 @@ class ColorPicker(_Property):
 
     def _get(self, data):
         return {self.name: _obs.obs_data_get_int(data, self.name)}
+
+
+class Font(_Property):
+    """Create a font picker element."""
+    def __init__(self, name, text, default_face=None, default_size=None, default_bold=False,
+                 default_italic=False, default_underline=False, default_strikeout=False, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text, doc, visible, enabled)
+        self.default = {
+            "face": default_face,
+            "size": int(default_size) if default_size else None,
+            "flags":
+                (_obs.OBS_FONT_BOLD if default_bold else 0) |
+                (_obs.OBS_FONT_ITALIC if default_italic else 0) |
+                (_obs.OBS_FONT_UNDERLINE if default_underline else 0) |
+                (_obs.OBS_FONT_STRIKEOUT if default_strikeout else 0)
+        }
+
+    def _add(self, props, on_changed):
+        p = _obs.obs_properties_add_font(props, self.name, self.text)
+        super()._add(p, on_changed)
+
+    def _default(self):
+        return {self.name: self.default}
+
+    def _get(self, data):
+        o = _obs.obs_data_get_obj(data, self.name)
+        try:
+            d = _helper.read_data(o, None)
+        finally:
+            _obs.obs_data_release(o)
+        f = d.get("flags", 0)
+        d.update({
+            "bold": bool(f & _obs.OBS_FONT_BOLD),
+            "italic": bool(f & _obs.OBS_FONT_ITALIC),
+            "underline": bool(f & _obs.OBS_FONT_UNDERLINE),
+            "strikeout": bool(f & _obs.OBS_FONT_STRIKEOUT),
+        })
+        return {self.name: d}
 
 
 def _button_call(properties, btn):

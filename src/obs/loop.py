@@ -83,6 +83,7 @@ class Loop:
         self.steps_per_interval = 10
         self._tls = threading.local()
         self._tls.abort = Future()
+        self._tls.is_main = True
         self._threads = []
         self._started = False
 
@@ -133,7 +134,17 @@ class Loop:
             else:
                 if abort.has_result():
                     raise KeyboardInterrupt
-        self.steps.append((callable, args, future))
+        if self._tls.is_main:
+            try:
+                r = callable(*args)
+            except Exception as ex:
+                if future:
+                    future.set_exception(ex)
+            else:
+                if future:
+                    future.set_result(r)
+        else:
+            self.steps.append((callable, args, future))
 
     def _source_by_name(self, name):
         s = _obs.obs_get_source_by_name(name)
@@ -176,6 +187,7 @@ class Loop:
     def _new_thread(self, callable):
         def _starter():
             self._tls.abort = a = Future()
+            self._tls.is_main = False
             self._threads.append(a)
             try:
                 callable()

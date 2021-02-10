@@ -132,15 +132,22 @@ def get_property_names(size_t properties):
 
 
 def read_data(size_t data, names):
-    cdef void *d =  obs_data_first(<void*>data)
-    cdef void *o
+    if not data:
+        return {}
+    return _read_data(<void*>data, names)
+
+
+cdef object _read_data(void *data, object names):
     cdef str n
-    cdef bytes s
+    cdef void *d
     cdef uint32_t dtype
+    cdef void *o
+    cdef bytes s
+    d = obs_data_first(data)
     r = {}
     while d:
         n = obs_data_item_get_name(d).decode()
-        if not names or n in names:
+        if n and (not names or n in names):
             dtype = obs_data_item_gettype(d)
             if dtype == OBS_DATA_NULL:
                 r[n] = None
@@ -157,14 +164,10 @@ def read_data(size_t data, names):
                     r[n] = f"Unhandled numtype: {dtype}"
             elif dtype == OBS_DATA_BOOLEAN:
                 r[n] = obs_data_item_get_bool(d)
-            elif dtype == OBS_DATA_OBJECT:
+            elif dtype == OBS_DATA_OBJECT or dtype == OBS_DATA_ARRAY:
                 o = obs_data_item_get_obj(d)
-                r[n] = read_data(<size_t>o, None)
+                r[n] = _read_data(o, None)
                 obs_data_release(o)
-            elif dtype == OBS_DATA_ARRAY:
-                o = obs_data_item_get_array(d)
-                r[n] = read_data_array(<size_t>o)
-                obs_data_array_release(o)
             else:
                 r[n] = f"Unhandled type: {dtype}"
         if not obs_data_item_next(&d):
@@ -173,11 +176,25 @@ def read_data(size_t data, names):
 
 
 def read_data_array(size_t data_array):
-    cdef void *d = <void*>data_array
+    if not data_array:
+        return []
+    return _read_data_array(<void*>data_array)
+
+
+cdef object _read_data_array(void* data_array):
+    cdef void *item
     r = []
-    for i in range(obs_data_array_count(d)):
-        r.append(read_data(<size_t>obs_data_array_item(d, i), None))
+    for i in range(obs_data_array_count(data_array)):
+        item = obs_data_array_item(data_array, i)
+        if item:
+            try:
+                r.append(read_data(<size_t>item, None))
+            finally:
+                obs_data_release(item)
+        else:
+            r.append(None)
     return r
+
 
 cdef void _append_filter_data(void *source, void *filter, void *list_obj) nogil:
     cdef const char *name = obs_source_get_name(filter)
@@ -188,6 +205,7 @@ cdef void _append_filter_data(void *source, void *filter, void *list_obj) nogil:
             (<list>list_).append((name.decode(), kind.decode()))
         except Exception as ex:
             print("Unhandled", ex, file=sys.stderr)
+
 
 def get_filter_names(size_t source):
     cdef void *source_ = <void*>source

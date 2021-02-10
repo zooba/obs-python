@@ -18,9 +18,42 @@ def _erase(data, key, obj):
     _obs.obs_data_erase(data, key)
 
 
+def _unset_default(data, key, obj):
+    _obs.obs_data_unset_default_value(data, key)
+
+
+def _make_list(arr, obj):
+    d = _obs.obs_data_array_create()
+    try:
+        for o in obj:
+            d2 = _obs.obs_data_create()
+            try:
+                set_data(d2, o.items())
+                _obs.obs_data_array_push_back(arr, d2)
+            finally:
+                _obs.obs_data_release(d2)
+        d_, d = d, None
+        return d_
+    finally:
+        if d:
+            _obs.obs_data_release(d)
+
+
+def _set_list(data, key, obj):
+    o = _make_list(obj)
+    try:
+        _obs.obs_data_set_array(data, key, o)
+    finally:
+        _obs.obs_data_release(o)
+
+
+def _set_default_list(data, key, obj):
+    pass
+
+
 def _set_obj(data, key, obj):
     d = _obs.obs_data_create()
-    _set_data(d, obj.items())
+    set_data(d, obj.items())
     _obs.obs_data_set_obj(data, key, d)
 
 
@@ -30,7 +63,7 @@ def _set_default_string(data, key, string):
 
 def _set_default_obj(data, key, obj):
     d = _obs.obs_data_create()
-    _set_data(d, obj.items())
+    set_data(d, obj.items())
     _obs.obs_data_set_default_obj(data, key, d)
 
 
@@ -39,6 +72,8 @@ _SET_FUNC = {
     int: _obs.obs_data_set_int,
     float: _obs.obs_data_set_double,
     str: _obs.obs_data_set_string,
+    tuple: _set_list,
+    list: _set_list,
     dict: _set_obj,
     type(None): _erase,
 }
@@ -49,8 +84,10 @@ _SET_DEFAULT_FUNC = {
     int: _obs.obs_data_set_default_int,
     float: _obs.obs_data_set_default_double,
     str: _set_default_string,
+    tuple: _set_default_list,
+    list: _set_default_list,
     dict: _set_default_obj,
-    type(None): lambda *_: None,
+    type(None): _unset_default,
 }
 
 

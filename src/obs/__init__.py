@@ -54,6 +54,7 @@ def ready(globals):
             for p in PROPS:
                 defaults.update(p._default())
             f = _loop.Future()
+            _loop.LOOP.start()
             _loop.LOOP.schedule("defaults", data, defaults, future=f)
             return f.result()
 
