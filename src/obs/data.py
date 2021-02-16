@@ -100,6 +100,8 @@ def set_data(data, key_value_pairs, defaults=False):
     Otherwise, the current values are set.
     """
     funcs = _SET_DEFAULT_FUNC if defaults else _SET_FUNC
+    if isinstance(key_value_pairs, dict):
+        key_value_pairs = key_value_pairs.items()
     for k, v in key_value_pairs:
         if not k:
             continue

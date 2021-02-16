@@ -43,7 +43,6 @@ class FrameData:
 class Source:
     def __init__(self, name, type_=None, owner=None):
         self.name = name
-        self._steps = []
         self._type = type_
         self.owner = owner
 
@@ -57,6 +56,15 @@ class Source:
 
     def __repr__(self):
         return f"<{self._type or 'Source'} \"{self.name}\">"
+
+    def __hash__(self):
+        return hash(Source) ^ hash(self.name)
+
+    def __eq__(self, other):
+        return isinstance(other, Source) and self.name == other.name
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def get_type(self):
         if self._type:
@@ -95,21 +103,6 @@ class Source:
         f = Future()
         self._do("obs_source_get_frame_data", future=f)
         return FrameData(f)
-
-    def get_pos(self):
-        return self._call("obs_source_get_pos")
-
-    def set_pos(self, x, y):
-        self._do("obs_source_set_pos", (x, y))
-
-    def get_crop(self):
-        return self._call("obs_source_get_crop")
-
-    def set_crop(self, left, right, top, bottom):
-        self._do("obs_source_set_crop", (left, right, top, bottom))
-
-    def adjust_crop(self, d_left, d_right, d_top, d_bottom):
-        self._do("obs_source_adjust_crop", (d_left, d_right, d_top, d_bottom))
 
     def get_sync_offset(self):
         return self._call("obs_source_get_sync_offset")

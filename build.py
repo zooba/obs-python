@@ -83,7 +83,7 @@ def download_obs_source(outdir, tmpdir):
     out = tmpdir / "obs-source"
     if not out.is_dir():
         print("Extracting", src, "to", out)
-        deps.mkdir(parents=True, exist_ok=True)
+        out.mkdir(parents=True, exist_ok=True)
         with ZipFile(src) as zf:
             zf.extractall(out)
     os.environ["OBS_SOURCE"] = str(out)

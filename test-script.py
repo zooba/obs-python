@@ -6,6 +6,7 @@ import requests
 from time import sleep
 
 PROPERTIES = [
+    OP.SceneItemList("scene", "Scenes"),
     OP.Button("button", "Button Text", print, doc="Clicking this button will do something"),
     OP.Button("disbutton", "Dis Button", print, enabled=False, doc="'Dis' means 'Disabled' :3"),
     OP.Font("font", "Font"),
@@ -15,6 +16,9 @@ PROPERTIES = [
         OP.TextSources("source", "Source"),
     ]),
 ]
+
+def on_scene_changed(new_value):
+    print(new_value)
 
 VALUES = {}
 
@@ -30,8 +34,6 @@ def do_switching():
 
 def on_update():
     print(VALUES)
-    if VALUES["urltext"] and VALUES["url"] and VALUES["interval"] and VALUES["source"]:
-        obs.run(do_switching)
 
 
 obs.ready(globals())

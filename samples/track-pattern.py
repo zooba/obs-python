@@ -9,24 +9,31 @@ from time import sleep, perf_counter
 VALUES = {
     "_state": None,
     "_stop": True,
+    "_skip": set(),
+    "_start_pos": {},
 }
 
 def on_start():
-    print("starting")
-    if VALUES["_stop"]:
-        obs.run(do_tracking)
+    print("(Re)starting tracking")
     VALUES["_state"] = None
-    VALUES["_stop"] = False
+    VALUES["_skip"] = set()
+    for item, v in VALUES.get("_start_pos", {}).items():
+        item.set_pos(*v)
+    VALUES["_start_pos"] = {}
+    if VALUES["_stop"]:
+        VALUES["_stop"] = False
+        obs.run(do_tracking)
     for p in PROPERTIES:
-        print(p.name)
         if p.name == "stop":
             p.enable()
             break
     return True
 
 def on_stop():
-    print("stopping")
+    print("Stopping tracking")
     VALUES["_stop"] = True
+    for item, v in VALUES.get("_start_pos", {}).items():
+        item.set_pos(*v)
     for p in PROPERTIES:
         print(p.name)
         if p.name == "stop":
@@ -52,8 +59,8 @@ PROPERTIES = [
         OP.Number("search", "Search radius", 0.01, 1.0, 0.01, default=0.1),
     ]),
     OP.Group("reactiongroup", "Reaction", elements=[
-        OP.SourceList("movesource", "Move"),
-        OP.Number("movescale", "Scale", 0.5, 100.0, 0.5, default=1.0),
+        OP.List("move", "Move", doc=("Items to move, as 'scene|source|scale' or '*|source|scale', " + 
+            "where 'scale' is a float")),
     ]),
     OP.Group("debug", "Debugging", checkable=True, default=False, elements=[
         OP.TextSources("debugcoords", "Show Offset"),
@@ -155,9 +162,20 @@ def do_tracking():
         if VALUES["debug"] and VALUES["debugtime"]:
             VALUES["debugtime"]["text"] = "{:.3f}s".format(perf_counter() - start)
 
-        s = VALUES["movescale"]
-        p = VALUES["movesource"].get_pos()
-        VALUES["movesource"].set_pos(p[0] + best[0] * s, p[1] + best[1] * s)
+        for sss in VALUES["move"]:
+            if sss in VALUES["_skip"]:
+                continue
+            try:
+                scene, source, scale = sss.split("|", maxsplit=3)
+                item = obs.get_sceneitem(scene, source)
+                p = item.get_pos()
+                scale = float(scale)
+            except Exception as ex:
+                print(ex)
+                VALUES["_skip"].add(sss)
+            else:
+                VALUES["_start_pos"].setdefault(item, p)
+                item.set_pos(p[0] + best[0] * scale, p[1] + best[1] * scale)
 
 
 def on_update():

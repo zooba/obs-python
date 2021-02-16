@@ -3,6 +3,8 @@ import pathlib
 
 from . import data as _data
 from . import _helper
+from .loop import LOOP
+from .sceneitem import SceneItem as _SceneItem
 from .source import Source as _Source
 
 def render(elements, on_changed):
@@ -14,15 +16,18 @@ def render(elements, on_changed):
 
 class _Property:
     def __init__(self, name, text, doc=None, visible=True, enabled=True):
-        self.__property = None
+        self.__property = []
         self.name = name
         self.text = text
         self.doc = doc
         self.visible = visible
         self.enabled = enabled
 
-    def _add(self, p, on_changed):
-        self.__property = p
+    def _add(self, p, on_changed, clear=True):
+        if clear:
+            self.__property = [p]
+        else:
+            self.__property.append(p)
         if self.doc:
             _obs.obs_property_set_long_description(p, self.doc)
         _obs.obs_property_set_visible(p, self.visible)
@@ -33,22 +38,26 @@ class _Property:
     def show(self):
         if not self.visible:
             self.visible = True
-            _obs.obs_property_set_visible(self.__property, True)
+            for p in self.__property:
+                _obs.obs_property_set_visible(p, True)
 
     def hide(self):
         if self.visible:
             self.visible = False
-            _obs.obs_property_set_visible(self.__property, False)
+            for p in self.__property:
+                _obs.obs_property_set_visible(p, False)
 
     def enable(self):
         if not self.enabled:
             self.enabled = True
-            _obs.obs_property_set_enabled(self.__property, True)
+            for p in self.__property:
+                _obs.obs_property_set_enabled(p, True)
 
     def disable(self):
         if self.enabled:
             self.enabled = False
-            _obs.obs_property_set_enabled(self.__property, False)
+            for p in self.__property:
+                _obs.obs_property_set_enabled(p, False)
 
     def get(self, data):
         v = self._get(data)
@@ -83,11 +92,10 @@ class Group(_Property):
         g = _obs.obs_properties_add_group(props, self.name, self.text, flags, p)
         super()._add(g, on_changed)
 
-    def _default(self):
-        d = {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
         for e in self.elements:
-            d.update(e._default())
-        return d
+            e._defaults(data)
 
     def _get(self, data):
         d = {self.name: _obs.obs_data_get_bool(data, self.name)}
@@ -125,8 +133,8 @@ class Text(_Property):
             _obs.obs_property_text_set_monospace(p, True)
         super()._add(p, on_changed)
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         return {self.name: _obs.obs_data_get_string(data, self.name)}
@@ -143,8 +151,8 @@ class Checkbox(_Property):
         self._property = p = _obs.obs_properties_add_bool(props, self.name, self.text)
         super()._add(p, on_changed)
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         return {self.name: _obs.obs_data_get_bool(data, self.name)}
@@ -191,8 +199,8 @@ class Number(_Property):
             if self.suffix:
                 _obs.obs_property_int_set_suffix(p, self.suffix)
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         if self.type is float:
@@ -232,8 +240,9 @@ class Path(_Property):
         p = _obs.obs_properties_add_path(props, self.name, self.text, t, self.filter, self.default)
         super()._add(p, on_changed)
 
-    def _default(self):
-        return {self.name: pathlib.Path(self.default) if self.default else None}
+    def _defaults(self, data):
+        v = pathlib.Path(self.default) if self.default else None
+        _data.set_data(data, {self.name: v}, defaults=True)
 
     def _get(self, data):
         p = _obs.obs_data_get_string(data, self.name)
@@ -283,8 +292,8 @@ class DropDown(_Property):
         for k, v in _pairs(self.items):
             add(p, str(k), self.type(v))
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         if self.type is float:
@@ -323,8 +332,8 @@ class List(_Property):
         for d in self.default:
             _obs.obs_property_list_add_string(p, d, d)
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         o = _obs.obs_data_get_array(data, self.name)
@@ -349,8 +358,8 @@ class Color(_Property):
         p = _obs.obs_properties_add_color(props, self.name, self.text)
         super()._add(p, on_changed)
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         return {self.name: _obs.obs_data_get_int(data, self.name)}
@@ -376,8 +385,8 @@ class Font(_Property):
         p = _obs.obs_properties_add_font(props, self.name, self.text)
         super()._add(p, on_changed)
 
-    def _default(self):
-        return {self.name: self.default}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: self.default}, defaults=True)
 
     def _get(self, data):
         o = _obs.obs_data_get_obj(data, self.name)
@@ -414,8 +423,8 @@ class Button(_Property):
         p = _obs.obs_properties_add_button(props, self.name, self.text, _button_call)
         super()._add(p, None)
 
-    def _default(self):
-        return {}
+    def _defaults(self, data):
+        pass
 
     def _get(self, data):
         return {}
@@ -456,8 +465,8 @@ class Migrate(_Property):
             raise TypeError("unsupported migration type: {}".format(self.old_type))
         super()._add(p, on_changed)
 
-    def _default(self):
-        return {}
+    def _defaults(self, data):
+        pass
 
     def _get(self, data):
         if self.new_name:
@@ -486,6 +495,30 @@ def _contains_pattern(s, patterns):
         if p.endswith("*"):
             return s.startswith(p[:-1])
     return False
+
+
+class SceneList(_Property):
+    """Create a list of scenes"""
+    def __init__(self, name, text, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text,
+                         doc=doc, visible=visible, enabled=enabled)
+
+    def _add(self, props, on_changed):
+        p = _obs.obs_properties_add_list(props, self.name, self.text,
+            _obs.OBS_COMBO_TYPE_LIST, _obs.OBS_COMBO_FORMAT_STRING)
+        super()._add(p, on_changed)
+
+        _obs.obs_property_list_add_string(p, "(None)", None)
+        for n in _helper.get_scene_names():
+            _obs.obs_property_list_add_string(p, n, n)
+
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: None}, defaults=True)
+
+    def _get(self, data):
+        n = _obs.obs_data_get_string(data, self.name)
+        return {self.name: n if n else None}
 
 
 class SourceList(_Property):
@@ -520,8 +553,8 @@ class SourceList(_Property):
             finally:
                 _obs.source_list_release(sources)
 
-    def _default(self):
-        return {self.name: None}
+    def _defaults(self, data):
+        _data.set_data(data, {self.name: None}, defaults=True)
 
     def _get(self, data):
         n = _obs.obs_data_get_string(data, self.name)
@@ -585,3 +618,69 @@ class SourceGroups(SourceList):
                  doc=None, visible=True, enabled=True):
         super().__init__(name, text, "group",
                          doc=doc, visible=visible, enabled=enabled)
+
+
+class SceneItemList(_Property):
+    """A list of scenes and items within those scenes"""
+    def __init__(self, name, text, item_text=None, *,
+                 doc=None, visible=True, enabled=True):
+        super().__init__(name, text,
+                         doc=doc, visible=visible, enabled=enabled)
+        self.item_name = f"_{name}_item"
+        self.item_text = item_text or f"{text} item"
+        self._scenes = None
+        self._items = None
+
+    def _add(self, props, on_changed):
+        self._scenes = p1 = _obs.obs_properties_add_list(
+            props, self.name, self.text,
+            _obs.OBS_COMBO_TYPE_LIST, _obs.OBS_COMBO_FORMAT_STRING
+        )
+        super()._add(p1, self._update)
+        self._items = p2 = _obs.obs_properties_add_list(
+            props, self.item_name, self.item_text,
+            _obs.OBS_COMBO_TYPE_EDITABLE, _obs.OBS_COMBO_FORMAT_STRING
+        )
+        super()._add(p2, on_changed, clear=False)
+
+        _obs.obs_property_list_add_string(p1, "(None)", None)
+        for n in sorted(_helper.get_scene_names()):
+            _obs.obs_property_list_add_string(p1, n, n)
+        _obs.obs_property_list_add_string(p2, "(None)", None)
+
+    @staticmethod
+    def _update(properties, prop, data=None):
+        if not data:
+            return
+        n1 = _obs.obs_property_name(prop)
+        n2 = f"_{n1}_item"
+        p = _obs.obs_properties_get(properties, n2)
+        return SceneItemList._do_update(data, p, n1, n2)
+
+    @classmethod
+    def _do_update(cls, data, item_prop, name, item_name):
+        s1 = _obs.obs_data_get_string(data, name)
+        s2 = _obs.obs_data_get_string(data, item_name)
+        _obs.obs_property_list_clear(item_prop)
+        _obs.obs_property_list_add_string(item_prop, "(None)", None)
+        if not s1:
+            return True # still need to update
+        try:
+            items = _helper.get_scene_item_names(s1)
+        except LookupError as ex:
+            _obs.obs_property_list_add_string(item_prop, s2, s2)
+            return True
+        for n, k in items:
+            _obs.obs_property_list_add_string(item_prop, n, n)
+        return True
+
+    def _defaults(self, data):
+        self._do_update(data, self._items, self.name, self.item_name)
+        _data.set_data(data, {self.name: None, self.item_name: None}, defaults=True)
+
+    def _get(self, data):
+        s1 = _obs.obs_data_get_string(data, self.name)
+        s2 = _obs.obs_data_get_string(data, self.item_name)
+        if s1 and s2:
+            return {self.name: _SceneItem(s1, _Source(s2))}
+        return {self.name: None}

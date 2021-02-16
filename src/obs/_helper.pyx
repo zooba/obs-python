@@ -4,6 +4,10 @@
 from _obs cimport *
 from cpython.ref cimport PyObject
 
+cdef extern from "Python.h":
+    void PyErr_WriteUnraisable(void *)
+
+
 import sys
 
 cdef class RenderedData:
@@ -204,11 +208,63 @@ cdef void _append_filter_data(void *source, void *filter, void *list_obj) nogil:
         try:
             (<list>list_).append((name.decode(), kind.decode()))
         except Exception as ex:
-            print("Unhandled", ex, file=sys.stderr)
+            PyErr_WriteUnraisable(NULL)
 
 
 def get_filter_names(size_t source):
     cdef void *source_ = <void*>source
     cdef list result = list()
     obs_source_enum_filters(source_, <obs_source_enum_proc_t>_append_filter_data, <PyObject*>result)
+    return result
+
+
+cdef bool _append_scene(void *list_obj, void *source) nogil:
+    cdef const char *name = obs_source_get_name(source)
+    cdef PyObject *list_ = <PyObject*>list_obj
+    with gil:
+        try:
+            (<list>list_).append((name.decode(), <size_t>obs_source_get_ref(source)))
+        except Exception as ex:
+            PyErr_WriteUnraisable(NULL)
+    return True
+
+
+def get_scene_names():
+    cdef list items = list()
+    with nogil:
+        obs_enum_scenes(_append_scene, <PyObject*>items)
+    result = []
+    for n, p in items:
+        obs_source_release(<void*><size_t>p)
+        result.append(n)
+    return result
+
+
+cdef bool _append_sceneitem_data(void *scene, void *sceneitem, void *list_obj) nogil:
+    cdef void *source = obs_sceneitem_get_source(sceneitem)
+    if not source:
+        return True
+    cdef const char *name = obs_source_get_name(source)
+    cdef const char *kind = obs_source_get_unversioned_id(source)
+    cdef PyObject *list_ = <PyObject*>list_obj
+    with gil:
+        try:
+            (<list>list_).append((name.decode(), kind.decode()))
+        except Exception as ex:
+            PyErr_WriteUnraisable(NULL)
+    return True
+
+
+def get_scene_item_names(str scene_name):
+    cdef void *source = NULL
+    cdef list result = []
+    cdef bytes scene_name_ = scene_name.encode("utf-8")
+    cdef const char *pscene_name = scene_name_
+    with nogil:
+        source = obs_get_source_by_name(pscene_name)
+        if not source:
+            with gil:
+                raise LookupError(f"no scene named {scene_name}")
+        obs_scene_enum_items(obs_scene_from_source(source), _append_sceneitem_data, <PyObject*>result)
+        obs_source_release(source)
     return result

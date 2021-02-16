@@ -65,15 +65,19 @@ class Future:
 
 
 class _SourceReleaser:
-    def __init__(self, source, returns=None):
+    def __init__(self, source, returns=None, is_sceneitem=False):
         self._source = source
         self._returns = returns
+        self._is_sceneitem = is_sceneitem
 
     def __enter__(self):
         return self._returns or self._source
 
     def __exit__(self, exc_type, exc_value, exc_tb):
-        _obs.obs_source_release(self._source)
+        if self._is_sceneitem:
+            _obs.obs_sceneitem_release(self._source)
+        else:
+            _obs.obs_source_release(self._source)
 
 
 class Loop:
@@ -134,17 +138,17 @@ class Loop:
             else:
                 if abort.has_result():
                     raise KeyboardInterrupt
-        if self._tls.is_main:
-            try:
-                r = callable(*args)
-            except Exception as ex:
-                if future:
-                    future.set_exception(ex)
-            else:
-                if future:
-                    future.set_result(r)
-        else:
-            self.steps.append((callable, args, future))
+            if self._tls.is_main:
+                try:
+                    r = callable(*args)
+                except Exception as ex:
+                    if future:
+                        future.set_exception(ex)
+                else:
+                    if future:
+                        future.set_result(r)
+                return
+        self.steps.append((callable, args, future))
 
     def _source_by_name(self, name):
         s = _obs.obs_get_source_by_name(name)
@@ -164,25 +168,22 @@ class Loop:
         finally:
             _obs.obs_source_release(s)
 
-    def _sceneitem_by_name(self, name, scene=None):
-        if scene is None:
-            scene_s = _obs.obs_frontend_get_current_scene()
-            scene = _obs.obs_scene_from_source(scene_s)
-        if scene is None:
-            raise LookupError("unable to find current scene")
-        i = _obs.obs_scene_find_source_recursive(scene, name)
-        if i is None:
-            raise LookupError("no sceneitem named {}".format(name))
-        return i
+    def _sceneitem_by_name(self, scene_name, name):
+        with self._source_by_name(scene_name) as source:
+            scene = _obs.obs_scene_from_source(source)
+            if not scene:
+                raise LookupError("no scene named {}".format(scene_name))
+            i = _obs.obs_scene_find_source_recursive(scene, name)
+            if i is None:
+                raise LookupError("no sceneitem named {}".format(name))
+            _obs.obs_sceneitem_addref(i)
+            return _SourceReleaser(i, is_sceneitem=True)
 
     def _updated(self, props, data, values, on_update):
         for p in props:
             values.update(p._get(data))
         if on_update:
             on_update()
-
-    def _defaults(self, data, defaults):
-        return _data.set_data(data, defaults.items(), defaults=True)
 
     def _new_thread(self, callable):
         def _starter():
@@ -244,39 +245,29 @@ class Loop:
         obj.close()
 
 
-    def _obs_source_get_pos(self, source_name):
-        si = self._sceneitem_by_name(source_name)
-        p = _obs.vec2()
-        _obs.obs_sceneitem_get_pos(si, p)
-        return p.x, p.y
+    def _obs_sceneitem_get_pos(self, scene_name, source_name):
+        with self._sceneitem_by_name(scene_name, source_name) as si:
+            p = _obs.vec2()
+            _obs.obs_sceneitem_get_pos(si, p)
+            return p.x, p.y
 
-    def _obs_source_set_pos(self, source_name, pos):
-        si = self._sceneitem_by_name(source_name)
-        p = _obs.vec2()
-        p.x, p.y = pos
-        _obs.obs_sceneitem_set_pos(si, p)
+    def _obs_sceneitem_set_pos(self, scene_name, source_name, pos):
+        with self._sceneitem_by_name(scene_name, source_name) as si:
+            p = _obs.vec2()
+            p.x, p.y = pos
+            _obs.obs_sceneitem_set_pos(si, p)
 
-    def _obs_source_get_crop(self, source_name):
-        si = self._sceneitem_by_name(source_name)
-        crop = _obs.obs_sceneitem_crop()
-        _obs.obs_sceneitem_get_crop(si, crop)
-        return crop.left, crop.right, crop.top, crop.bottom
+    def _obs_sceneitem_get_crop(self, scene_name, source_name):
+        with self._sceneitem_by_name(scene_name, source_name) as si:
+            crop = _obs.obs_sceneitem_crop()
+            _obs.obs_sceneitem_get_crop(si, crop)
+            return crop.left, crop.right, crop.top, crop.bottom
 
-    def _obs_source_adjust_crop(self, source_name, crop_deltas):
-        si = self._sceneitem_by_name(source_name)
-        crop = _obs.obs_sceneitem_crop()
-        _obs.obs_sceneitem_get_crop(si, crop)
-        crop.left += crop_deltas[0]
-        crop.right += crop_deltas[1]
-        crop.top += crop_deltas[2]
-        crop.bottom += crop_deltas[3]
-        _obs.obs_sceneitem_set_crop(si, crop)
-
-    def _obs_source_set_crop(self, source_name, crop_sizes):
-        si = self._sceneitem_by_name(source_name)
-        crop = _obs.obs_sceneitem_crop()
-        crop.left, crop.right, crop.top, crop.bottom = crop_sizes
-        _obs.obs_sceneitem_set_crop(si, crop)
+    def _obs_sceneitem_set_crop(self, scene_name, source_name, crop_sizes):
+        with self._sceneitem_by_name(scene_name, source_name) as si:
+            crop = _obs.obs_sceneitem_crop()
+            crop.left, crop.right, crop.top, crop.bottom = crop_sizes
+            _obs.obs_sceneitem_set_crop(si, crop)
 
 
     def _obs_source_get_sync_offset(self, source_name):

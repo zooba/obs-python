@@ -6,6 +6,18 @@ from . import props as _props
 def run(callable):
     _loop.LOOP.schedule("new_thread", callable)
 
+
+def get_source(source):
+    from .source import Source
+    return Source(source)
+
+
+def get_sceneitem(scene, source):
+    from .sceneitem import SceneItem
+    from .source import Source
+    return SceneItem(scene, Source(source))
+
+
 def ready(globals):
     try:
         desc = globals["__doc__"]
@@ -24,12 +36,10 @@ def ready(globals):
         pass
     else:
         VALUES = globals.setdefault("VALUES", {})
-        for p in PROPS:
-            VALUES.update(p._default())
-
         FUNCS = {k: v for k, v in globals.items()
                  if k.startswith("on_") and k.endswith("_changed")
                  and callable(v)}
+
         def on_prop_changed(properties, prop, data=None):
             n = _obs.obs_property_name(prop)
             k = "on_{}_changed".format(n)
@@ -50,13 +60,8 @@ def ready(globals):
             return _props.render(PROPS, on_prop_changed)
 
         def script_defaults(data):
-            defaults = {}
             for p in PROPS:
-                defaults.update(p._default())
-            f = _loop.Future()
-            _loop.LOOP.start()
-            _loop.LOOP.schedule("defaults", data, defaults, future=f)
-            return f.result()
+                p._defaults(data)
 
         try:
             ON_UPDATE = globals["on_update"]

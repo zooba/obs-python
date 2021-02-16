@@ -58,10 +58,18 @@ cdef extern from "obs.h" nogil:
     void obs_source_video_render(void* source)
     void obs_source_dec_showing(void* source)
 
+    void* obs_source_get_ref(void* source)
+    void obs_source_release(void* source)
     const char* obs_source_get_name(void* source)
     const char* obs_source_get_unversioned_id(void* source)
     ctypedef void (*obs_source_enum_proc_t)(void*, void*, void*)
     void obs_source_enum_filters(void* source, obs_source_enum_proc_t callback, void* data)
+
+    void obs_enum_scenes(bool (*callback)(void* data, void* scene), void* data)
+    void* obs_scene_from_source(void* source)
+    void* obs_sceneitem_get_scene(void* sceneitem)
+    void* obs_sceneitem_get_source(void* sceneitem)
+    void obs_scene_enum_items(void* scene, bool (*callback)(void* scene, void* sceneitem, void* data), void* data)
 
     uint32_t OBS_PROPERTY_GROUP
 
