@@ -4,6 +4,7 @@ from . import loop as _loop
 from . import props as _props
 
 def run(callable):
+    _loop.LOOP.start()
     _loop.LOOP.schedule("new_thread", callable)
 
 
