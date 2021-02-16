@@ -14,7 +14,13 @@ VALUES = {
 }
 
 def on_start():
+    if not VALUES.get("framesource"):
+        print("Cannot track with no source")
+        return
     print("(Re)starting tracking")
+    with VALUES["framesource"].get_frame() as f:
+        print("Source: {}".format(VALUES["framesource"]))
+        print("Size: {}x{}".format(f.width, f.height))
     VALUES["_state"] = None
     VALUES["_skip"] = set()
     for item, v in VALUES.get("_start_pos", {}).items():
