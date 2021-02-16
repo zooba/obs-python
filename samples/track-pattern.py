@@ -35,7 +35,6 @@ def on_stop():
     for item, v in VALUES.get("_start_pos", {}).items():
         item.set_pos(*v)
     for p in PROPERTIES:
-        print(p.name)
         if p.name == "stop":
             p.disable()
             break
@@ -171,7 +170,7 @@ def do_tracking():
                 p = item.get_pos()
                 scale = float(scale)
             except Exception as ex:
-                print(ex)
+                print("Error parsing {}: {}".format(sss, ex))
                 VALUES["_skip"].add(sss)
             else:
                 VALUES["_start_pos"].setdefault(item, p)
